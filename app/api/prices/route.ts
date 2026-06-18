@@ -25,7 +25,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = 400
   }
 }
 
-async function scrapeAmazonPrice(query: string): Promise<number | null> {
+async function scrapeAmazonHtml(query: string): Promise<string | null> {
   const url = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   
@@ -40,34 +40,14 @@ async function scrapeAmazonPrice(query: string): Promise<number | null> {
     });
 
     if (!res.ok) return null;
-    const html = await res.text();
-
-    // Regex to match typical price in Amazon search results: e.g. <span class="a-price-whole">56,999<span class="a-price-decimal">.</span></span>
-    const priceMatch = html.match(/class="a-price-whole">([\d,]+)/);
-    if (priceMatch && priceMatch[1]) {
-      const priceVal = parseInt(priceMatch[1].replace(/,/g, ""), 10);
-      if (priceVal > 2000 && priceVal < 250000) {
-        return priceVal;
-      }
-    }
-
-    // Secondary match
-    const altMatch = html.match(/class="a-offscreen">₹([\d,]+)/);
-    if (altMatch && altMatch[1]) {
-      const priceVal = parseInt(altMatch[1].replace(/,/g, ""), 10);
-      if (priceVal > 2000 && priceVal < 250000) {
-        return priceVal;
-      }
-    }
-
-    return null;
+    return await res.text();
   } catch (e) {
     console.warn(`Amazon scrape failed for: ${query}`);
     return null;
   }
 }
 
-async function scrapeFlipkartPrice(query: string): Promise<number | null> {
+async function scrapeFlipkartHtml(query: string): Promise<string | null> {
   const url = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -81,21 +61,36 @@ async function scrapeFlipkartPrice(query: string): Promise<number | null> {
     });
 
     if (!res.ok) return null;
-    const html = await res.text();
-
-    const priceMatch = html.match(/₹([\d,]+)/);
-    if (priceMatch && priceMatch[1]) {
-      const priceVal = parseInt(priceMatch[1].replace(/,/g, ""), 10);
-      if (priceVal > 2000 && priceVal < 250000) {
-        return priceVal;
-      }
-    }
-
-    return null;
+    return await res.text();
   } catch (e) {
     console.warn(`Flipkart scrape failed for: ${query}`);
     return null;
   }
+}
+
+function extractPricesFromHtml(html: string): number[] {
+  const prices: number[] = [];
+  
+  // 1. Match structures like ₹56,999 or Rs. 56,999
+  const currencyRegex = /(?:₹|Rs\.?)\s?([\d,]+)/gi;
+  let match;
+  while ((match = currencyRegex.exec(html)) !== null) {
+    const val = parseInt(match[1].replace(/,/g, ""), 10);
+    if (!isNaN(val) && val > 0) {
+      prices.push(val);
+    }
+  }
+
+  // 2. Match Amazon price whole block tags
+  const amazonWholeRegex = /class="a-price-whole">([\d,]+)/gi;
+  while ((match = amazonWholeRegex.exec(html)) !== null) {
+    const val = parseInt(match[1].replace(/,/g, ""), 10);
+    if (!isNaN(val) && val > 0) {
+      prices.push(val);
+    }
+  }
+
+  return prices;
 }
 
 export async function GET(request: Request) {
@@ -109,16 +104,7 @@ export async function GET(request: Request) {
 
     const searchQuery = q.trim();
 
-    // 1. Fetch live prices concurrently with a timeout limit
-    const [amazonScraped, flipkartScraped] = await Promise.allSettled([
-      scrapeAmazonPrice(searchQuery),
-      scrapeFlipkartPrice(searchQuery)
-    ]);
-
-    let amazonPrice = amazonScraped.status === "fulfilled" ? amazonScraped.value : null;
-    let flipkartPrice = flipkartScraped.status === "fulfilled" ? flipkartScraped.value : null;
-
-    // 2. Fetch database base price if scrapers got blocked/throttled
+    // 1. Fetch expected baseline price from local/remote catalog first
     let baseDbPrice = 45000; // default generic fallback
     let brand = "";
     let model = "";
@@ -140,7 +126,41 @@ export async function GET(request: Request) {
       console.error("Database lookup failed inside prices API", dbError);
     }
 
-    // 3. Fallback logic: if scraping was blocked, construct simulated live prices with variance
+    // 2. Fetch raw HTML concurrently
+    const [amazonScraped, flipkartScraped] = await Promise.allSettled([
+      scrapeAmazonHtml(searchQuery),
+      scrapeFlipkartHtml(searchQuery)
+    ]);
+
+    const amazonHtml = amazonScraped.status === "fulfilled" ? amazonScraped.value : null;
+    const flipkartHtml = flipkartScraped.status === "fulfilled" ? flipkartScraped.value : null;
+
+    // Heuristic: filter extracted price options by proximity to target DB price
+    const findBestPrice = (html: string | null, targetPrice: number): number | null => {
+      if (!html) return null;
+      
+      const parsedPrices = extractPricesFromHtml(html);
+      if (parsedPrices.length === 0) return null;
+
+      // Filter prices: primary segment is between 70% and 145% of expected baseline
+      let filtered = parsedPrices.filter(p => p >= targetPrice * 0.7 && p <= targetPrice * 1.45);
+      
+      // Secondary fallback segment if empty: between 50% and 210%
+      if (filtered.length === 0) {
+        filtered = parsedPrices.filter(p => p >= targetPrice * 0.5 && p <= targetPrice * 2.1);
+      }
+
+      if (filtered.length === 0) return null;
+
+      // Sort by absolute proximity to baseline price, picking the closest match
+      filtered.sort((a, b) => Math.abs(a - targetPrice) - Math.abs(b - targetPrice));
+      return filtered[0];
+    };
+
+    let amazonPrice = findBestPrice(amazonHtml, baseDbPrice);
+    let flipkartPrice = findBestPrice(flipkartHtml, baseDbPrice);
+
+    // 3. Fallback mock simulator if scrapers were blocked
     if (!amazonPrice) {
       const variance = Math.floor(baseDbPrice * (Math.random() * 0.03 - 0.01));
       amazonPrice = baseDbPrice + variance;
@@ -151,7 +171,7 @@ export async function GET(request: Request) {
       flipkartPrice = baseDbPrice + variance;
     }
 
-    // Round to nearest 10 for clean currency display
+    // Round to nearest 10 for clean display
     amazonPrice = Math.round(amazonPrice / 10) * 10;
     flipkartPrice = Math.round(flipkartPrice / 10) * 10;
 
