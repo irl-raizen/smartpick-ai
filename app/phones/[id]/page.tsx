@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPhoneById, getPhones } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
+import { LivePrices } from "@/src/components/LivePrices";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -321,30 +322,11 @@ export default async function PhoneDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            {((phone.amazon_link && phone.amazon_link.trim() !== "") || (phone.flipkart_link && phone.flipkart_link.trim() !== "")) && (
-              <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                {phone.amazon_link && phone.amazon_link.trim() !== "" && (
-                  <a
-                    href={phone.amazon_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-center rounded-xl bg-orange-600/90 hover:bg-orange-600 px-4 py-3 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-orange-950/20 active:scale-95"
-                  >
-                    Buy on Amazon
-                  </a>
-                )}
-                {phone.flipkart_link && phone.flipkart_link.trim() !== "" && (
-                  <a
-                    href={phone.flipkart_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-center rounded-xl bg-blue-600/90 hover:bg-blue-600 px-4 py-3 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-blue-950/20 active:scale-95"
-                  >
-                    Buy on Flipkart
-                  </a>
-                )}
-              </div>
-            )}
+            <LivePrices
+              query={`${phone.brand} ${phone.model}`}
+              amazonLink={phone.amazon_link}
+              flipkartLink={phone.flipkart_link}
+            />
           </div>
 
           {/* Right Detailed Specs & Scores Card */}

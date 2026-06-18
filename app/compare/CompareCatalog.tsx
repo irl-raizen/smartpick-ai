@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Phone } from "@/src/types/phone";
 import { SearchableDropdown } from "@/src/components/SearchableDropdown";
+import { LivePrices } from "@/src/components/LivePrices";
 
 type CompareCatalogProps = {
   phones: Phone[];
@@ -195,30 +196,11 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
                 </div>
               </div>
 
-              {((phone1.amazon_link && phone1.amazon_link.trim() !== "") || (phone1.flipkart_link && phone1.flipkart_link.trim() !== "")) && (
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 border-t border-zinc-850/60 pt-4">
-                  {phone1.amazon_link && phone1.amazon_link.trim() !== "" && (
-                    <a
-                      href={phone1.amazon_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-center rounded-xl bg-orange-600/90 hover:bg-orange-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-orange-950/20 active:scale-95"
-                    >
-                      Buy on Amazon
-                    </a>
-                  )}
-                  {phone1.flipkart_link && phone1.flipkart_link.trim() !== "" && (
-                    <a
-                      href={phone1.flipkart_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-center rounded-xl bg-blue-600/90 hover:bg-blue-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-blue-950/20 active:scale-95"
-                    >
-                      Buy on Flipkart
-                    </a>
-                  )}
-                </div>
-              )}
+              <LivePrices
+                query={`${phone1.brand} ${phone1.model}`}
+                amazonLink={phone1.amazon_link}
+                flipkartLink={phone1.flipkart_link}
+              />
             </div>
 
             {/* Phone 2 Dashboard */}
@@ -279,30 +261,11 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
                 </div>
               </div>
 
-              {((phone2.amazon_link && phone2.amazon_link.trim() !== "") || (phone2.flipkart_link && phone2.flipkart_link.trim() !== "")) && (
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 border-t border-zinc-850/60 pt-4">
-                  {phone2.amazon_link && phone2.amazon_link.trim() !== "" && (
-                    <a
-                      href={phone2.amazon_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-center rounded-xl bg-orange-600/90 hover:bg-orange-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-orange-950/20 active:scale-95"
-                    >
-                      Buy on Amazon
-                    </a>
-                  )}
-                  {phone2.flipkart_link && phone2.flipkart_link.trim() !== "" && (
-                    <a
-                      href={phone2.flipkart_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-center rounded-xl bg-blue-600/90 hover:bg-blue-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-blue-950/20 active:scale-95"
-                    >
-                      Buy on Flipkart
-                    </a>
-                  )}
-                </div>
-              )}
+              <LivePrices
+                query={`${phone2.brand} ${phone2.model}`}
+                amazonLink={phone2.amazon_link}
+                flipkartLink={phone2.flipkart_link}
+              />
             </div>
           </div>
 
