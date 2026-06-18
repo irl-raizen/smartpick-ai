@@ -295,7 +295,7 @@ The ultimate mid-range smartphone for portrait photography and thin-design fans.
 ### Verdict
 The absolute best price-to-performance smartphone for gamers who want raw speed under 30k.'),
 
-('Poco', 'X6 Pro', 25999, 'Dimensity 8300 Ultra', '5000 mAh', '64MP Main + 8MP Ultra-Wide + 2MP Macro', '6.67 inch AMOLED, 120Hz', 7, 9, 8, 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500', 'https://www.amazon.in/s?k=Poco+X6+Pro', 'https://www.flipkart.com/search?q=Poco+X6+Pro', '### Pros
+('Poco', 'X6 Pro', 25999, 'Dimensity 8300 Ultra', '5000 mAh', '64MP Main + 8MP Ultra-Wide + 2MP Macro', '6.67 inch AMOLED, 120Hz', 7, 9, 8, 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500', 'https://amzn.to/4uON5m7', 'https://www.flipkart.com/search?q=Poco+X6+Pro', '### Pros
 - Flagship-grade Dimensity 8300 Ultra performance and LPDDR5X RAM.
 - Beautiful thin-bezel AMOLED screen.
 - Excellent haptics and 67W fast charging.

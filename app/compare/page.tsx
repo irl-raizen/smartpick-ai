@@ -1,8 +1,28 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getPhones } from "@/src/lib/supabase";
 import { CompareCatalog } from "./CompareCatalog";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Compare Smartphones",
+  description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
+  alternates: {
+    canonical: "/compare",
+  },
+  openGraph: {
+    title: "Compare Smartphones - SmartPick AI",
+    description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
+    url: "/compare",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Compare Smartphones - SmartPick AI",
+    description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
+  }
+};
 
 export default async function ComparePage() {
   const phones = await getPhones();

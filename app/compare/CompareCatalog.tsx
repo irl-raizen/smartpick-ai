@@ -138,97 +138,171 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
           {/* Comparison Cards & Winner Dashboard */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Phone 1 Dashboard */}
-            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden ${
+            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden flex flex-col justify-between ${
               overallWinner === "phone1"
                 ? "border-violet-500/50 bg-violet-950/10 shadow-lg shadow-violet-950/20"
                 : "border-zinc-900 bg-zinc-900/30"
             }`}>
-              {overallWinner === "phone1" && (
-                <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md">
-                  Overall Winner
-                </div>
-              )}
-              <span className="text-xs uppercase font-bold text-violet-400">{phone1.brand}</span>
-              <h2 className="text-2xl font-bold text-white mt-1">{phone1.model}</h2>
-              <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone1.price)}</p>
+              <div>
+                {overallWinner === "phone1" && (
+                  <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md z-10">
+                    Overall Winner
+                  </div>
+                )}
+                <span className="text-xs uppercase font-bold text-violet-400">{phone1.brand}</span>
+                <h2 className="text-2xl font-bold text-white mt-1">{phone1.model}</h2>
+                <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone1.price)}</p>
 
-              <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Price</span>
-                  <span className="font-semibold text-zinc-200">
-                    {formatPrice(phone1.price)} {renderWinnerBadge(priceWinner === "phone1")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Camera Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone1.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone1")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Gaming Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone1.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone1")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Battery Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone1.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone1")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
-                  <span className="text-zinc-400">Total Score</span>
-                  <span className="text-fuchsia-300">{phone1Overall} / 30</span>
+                {phone1.image_url && phone1.image_url.trim() !== "" && (
+                  <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
+                    <img
+                      src={phone1.image_url}
+                      alt={`${phone1.brand} ${phone1.model}`}
+                      className="h-full w-auto object-contain transition duration-500 hover:scale-105"
+                    />
+                  </div>
+                )}
+
+                <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Price</span>
+                    <span className="font-semibold text-zinc-200">
+                      {formatPrice(phone1.price)} {renderWinnerBadge(priceWinner === "phone1")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Camera Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone1.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone1")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Gaming Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone1.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone1")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Battery Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone1.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone1")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
+                    <span className="text-zinc-400">Total Score</span>
+                    <span className="text-fuchsia-300">{phone1Overall} / 30</span>
+                  </div>
                 </div>
               </div>
+
+              {((phone1.amazon_link && phone1.amazon_link.trim() !== "") || (phone1.flipkart_link && phone1.flipkart_link.trim() !== "")) && (
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 border-t border-zinc-850/60 pt-4">
+                  {phone1.amazon_link && phone1.amazon_link.trim() !== "" && (
+                    <a
+                      href={phone1.amazon_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-center rounded-xl bg-orange-600/90 hover:bg-orange-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-orange-950/20 active:scale-95"
+                    >
+                      Buy on Amazon
+                    </a>
+                  )}
+                  {phone1.flipkart_link && phone1.flipkart_link.trim() !== "" && (
+                    <a
+                      href={phone1.flipkart_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-center rounded-xl bg-blue-600/90 hover:bg-blue-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-blue-950/20 active:scale-95"
+                    >
+                      Buy on Flipkart
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Phone 2 Dashboard */}
-            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden ${
+            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden flex flex-col justify-between ${
               overallWinner === "phone2"
                 ? "border-violet-500/50 bg-violet-950/10 shadow-lg shadow-violet-950/20"
                 : "border-zinc-900 bg-zinc-900/30"
             }`}>
-              {overallWinner === "phone2" && (
-                <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md">
-                  Overall Winner
-                </div>
-              )}
-              <span className="text-xs uppercase font-bold text-violet-400">{phone2.brand}</span>
-              <h2 className="text-2xl font-bold text-white mt-1">{phone2.model}</h2>
-              <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone2.price)}</p>
+              <div>
+                {overallWinner === "phone2" && (
+                  <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md z-10">
+                    Overall Winner
+                  </div>
+                )}
+                <span className="text-xs uppercase font-bold text-violet-400">{phone2.brand}</span>
+                <h2 className="text-2xl font-bold text-white mt-1">{phone2.model}</h2>
+                <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone2.price)}</p>
 
-              <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Price</span>
-                  <span className="font-semibold text-zinc-200">
-                    {formatPrice(phone2.price)} {renderWinnerBadge(priceWinner === "phone2")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Camera Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone2.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone2")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Gaming Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone2.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone2")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Battery Score</span>
-                  <span className="font-semibold text-zinc-200">
-                    {phone2.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone2")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
-                  <span className="text-zinc-400">Total Score</span>
-                  <span className="text-fuchsia-300">{phone2Overall} / 30</span>
+                {phone2.image_url && phone2.image_url.trim() !== "" && (
+                  <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
+                    <img
+                      src={phone2.image_url}
+                      alt={`${phone2.brand} ${phone2.model}`}
+                      className="h-full w-auto object-contain transition duration-500 hover:scale-105"
+                    />
+                  </div>
+                )}
+
+                <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Price</span>
+                    <span className="font-semibold text-zinc-200">
+                      {formatPrice(phone2.price)} {renderWinnerBadge(priceWinner === "phone2")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Camera Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone2.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone2")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Gaming Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone2.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone2")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Battery Score</span>
+                    <span className="font-semibold text-zinc-200">
+                      {phone2.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone2")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
+                    <span className="text-zinc-400">Total Score</span>
+                    <span className="text-fuchsia-300">{phone2Overall} / 30</span>
+                  </div>
                 </div>
               </div>
+
+              {((phone2.amazon_link && phone2.amazon_link.trim() !== "") || (phone2.flipkart_link && phone2.flipkart_link.trim() !== "")) && (
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 border-t border-zinc-850/60 pt-4">
+                  {phone2.amazon_link && phone2.amazon_link.trim() !== "" && (
+                    <a
+                      href={phone2.amazon_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-center rounded-xl bg-orange-600/90 hover:bg-orange-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-orange-950/20 active:scale-95"
+                    >
+                      Buy on Amazon
+                    </a>
+                  )}
+                  {phone2.flipkart_link && phone2.flipkart_link.trim() !== "" && (
+                    <a
+                      href={phone2.flipkart_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-center rounded-xl bg-blue-600/90 hover:bg-blue-600 px-4 py-2.5 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-blue-950/20 active:scale-95"
+                    >
+                      Buy on Flipkart
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

@@ -14,8 +14,39 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SmartPick AI - Find & Compare Smartphones",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"),
+  title: {
+    default: "SmartPick AI - Find & Compare Smartphones",
+    template: "%s | SmartPick AI"
+  },
   description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+  alternates: {
+    canonical: "./",
+  },
+  openGraph: {
+    title: "SmartPick AI - Find & Compare Smartphones",
+    description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+    url: "./",
+    siteName: "SmartPick AI",
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SmartPick AI - Find & Compare Smartphones",
+    description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export default function RootLayout({

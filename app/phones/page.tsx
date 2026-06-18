@@ -1,9 +1,29 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { getPhones } from "@/src/lib/supabase";
 import { PhonesCatalog } from "./PhonesCatalog";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Browse Smartphone Catalog",
+  description: "Explore the full database of popular smartphones, specifications, prices, and performance ratings in India.",
+  alternates: {
+    canonical: "/phones",
+  },
+  openGraph: {
+    title: "Browse Smartphone Catalog - SmartPick AI",
+    description: "Explore the full database of popular smartphones, specifications, prices, and performance ratings in India.",
+    url: "/phones",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Browse Smartphone Catalog - SmartPick AI",
+    description: "Explore the full database of popular smartphones, specifications, prices, and performance ratings in India.",
+  }
+};
 
 export default async function PhonesPage() {
   const phones = await getPhones();

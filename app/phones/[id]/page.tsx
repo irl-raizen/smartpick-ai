@@ -20,15 +20,27 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const titleText = `${phone.brand} ${phone.model} Price, Specs, Review`;
   const descText = `Complete specifications, battery, camera, display, gaming performance and comparison for ${phone.brand} ${phone.model}.`;
+  const canonicalUrl = `/phones/${phone.id}`;
+  const imageUrl = phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined;
 
   return {
     title: titleText,
     description: descText,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       title: titleText,
       description: descText,
+      url: canonicalUrl,
       type: "website",
-      images: phone.image_url && phone.image_url.trim() !== "" ? [{ url: phone.image_url }] : [],
+      images: imageUrl ? [{ url: imageUrl }] : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: titleText,
+      description: descText,
+      images: imageUrl ? [imageUrl] : [],
     },
   };
 }
@@ -226,11 +238,16 @@ export default async function PhoneDetailPage({ params }: PageProps) {
     "name": `${phone.brand} ${phone.model}`,
     "image": phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined,
     "description": descText,
+    "brand": {
+      "@type": "Brand",
+      "name": phone.brand
+    },
     "offers": {
       "@type": "Offer",
       "price": phone.price,
       "priceCurrency": "INR",
-      "availability": "https://schema.org/InStock"
+      "availability": "https://schema.org/InStock",
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`
     }
   };
 
