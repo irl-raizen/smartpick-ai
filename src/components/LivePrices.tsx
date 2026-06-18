@@ -6,6 +6,8 @@ type StorePrice = {
   name: string;
   price: number;
   link: string;
+  source: "scraped" | "fallback";
+  confidence: number;
 };
 
 type PricesData = {
@@ -84,6 +86,7 @@ export function LivePrices({
             ? "bg-orange-600/90 hover:bg-orange-650 text-white"
             : "bg-blue-600/90 hover:bg-blue-650 text-white";
           const shadowClass = isAmazon ? "shadow-orange-950/20" : "shadow-blue-950/20";
+          const isLive = store.source === "scraped";
           
           return (
             <a
@@ -91,14 +94,24 @@ export function LivePrices({
               href={link}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex-1 text-center rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-300 hover:scale-[1.02] shadow-lg ${bgClass} ${shadowClass} active:scale-95 flex flex-col justify-center items-center gap-0.5`}
+              className={`flex-1 text-center rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-300 hover:scale-[1.02] shadow-lg ${bgClass} ${shadowClass} active:scale-95 flex flex-col justify-center items-center gap-1.5`}
             >
-              <span>Buy on {store.name}</span>
-              <span className="text-[10px] opacity-90 font-medium">
-                {store.price > 0
-                  ? `₹${store.price.toLocaleString("en-IN")}`
-                  : "Check Price"}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span>Buy on {store.name}</span>
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                  isLive ? "bg-emerald-400 animate-ping" : "bg-zinc-400"
+                }`} />
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="text-[11px] opacity-95 font-extrabold">
+                  {store.price > 0
+                    ? `₹${store.price.toLocaleString("en-IN")}`
+                    : "Check Price"}
+                </span>
+                <span className={`text-[8px] font-bold tracking-wide uppercase mt-0.5 opacity-90`}>
+                  {isLive ? "Live Price ✓" : "Estimated Price"}
+                </span>
+              </div>
             </a>
           );
         })}

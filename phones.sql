@@ -1,8 +1,11 @@
--- Migration: Add image, affiliate link, and review columns if they don't exist
+-- Migration: Add image, affiliate link, review, and caching columns if they don't exist
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS amazon_link TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS flipkart_link TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS ai_review TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS amazon_price INTEGER;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS flipkart_price INTEGER;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS prices_last_scraped TIMESTAMPTZ;
 
 -- Create articles table for AI content engine
 CREATE TABLE IF NOT EXISTS articles (

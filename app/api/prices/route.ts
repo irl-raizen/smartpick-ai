@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
-import { getPhones } from "@/src/lib/supabase";
+import { supabase, getPhones } from "@/src/lib/supabase";
+
+// In-memory fallback cache if Supabase columns are not migrated yet
+type CacheEntry = {
+  amazonPrice: number;
+  flipkartPrice: number;
+  source: "scraped" | "fallback";
+  confidence: number;
+  timestamp: number;
+};
+const memoryCache = new Map<string, CacheEntry>();
 
 // User agents list to rotate and look like a real browser
 const USER_AGENTS = [
@@ -71,7 +81,6 @@ async function scrapeFlipkartHtml(query: string): Promise<string | null> {
 function extractPricesFromHtml(html: string): number[] {
   const prices: number[] = [];
   
-  // 1. Match structures like ₹56,999 or Rs. 56,999
   const currencyRegex = /(?:₹|Rs\.?)\s?([\d,]+)/gi;
   let match;
   while ((match = currencyRegex.exec(html)) !== null) {
@@ -81,7 +90,6 @@ function extractPricesFromHtml(html: string): number[] {
     }
   }
 
-  // 2. Match Amazon price whole block tags
   const amazonWholeRegex = /class="a-price-whole">([\d,]+)/gi;
   while ((match = amazonWholeRegex.exec(html)) !== null) {
     const val = parseInt(match[1].replace(/,/g, ""), 10);
@@ -103,30 +111,88 @@ export async function GET(request: Request) {
     }
 
     const searchQuery = q.trim();
+    const queryKey = searchQuery.toLowerCase();
 
-    // 1. Fetch expected baseline price from local/remote catalog first
-    let baseDbPrice = 45000; // default generic fallback
+    // 1. Check in-memory cache first
+    const memCached = memoryCache.get(queryKey);
+    if (memCached && Date.now() - memCached.timestamp < 30 * 60 * 1000) {
+      console.log(`[Memory Cache Hit] for: ${searchQuery}`);
+      return NextResponse.json({
+        product: searchQuery,
+        stores: [
+          {
+            name: "Amazon",
+            price: memCached.amazonPrice,
+            link: `https://www.amazon.in/s?k=${encodeURIComponent(searchQuery)}`,
+            source: memCached.source,
+            confidence: memCached.confidence
+          },
+          {
+            name: "Flipkart",
+            price: memCached.flipkartPrice,
+            link: `https://www.flipkart.com/search?q=${encodeURIComponent(searchQuery)}`,
+            source: memCached.source,
+            confidence: memCached.confidence
+          }
+        ]
+      });
+    }
+
+    // 2. Fetch baseline metadata and check Supabase cache
+    let matchedPhoneId: string | null = null;
+    let baseDbPrice = 45000;
     let brand = "";
     let model = "";
 
     try {
       const phones = await getPhones();
-      const queryLower = searchQuery.toLowerCase();
       // Find closest matches
       const match = phones.find(p => 
-        queryLower.includes(p.model.toLowerCase()) || 
-        queryLower.includes(p.brand.toLowerCase() + " " + p.model.toLowerCase())
+        queryKey.includes(p.model.toLowerCase()) || 
+        queryKey.includes(p.brand.toLowerCase() + " " + p.model.toLowerCase())
       );
       if (match) {
+        matchedPhoneId = match.id;
         baseDbPrice = match.price;
         brand = match.brand;
         model = match.model;
+
+        // If the database has cache columns and the cache is valid (< 30 min)
+        if (
+          match.prices_last_scraped && 
+          match.amazon_price && 
+          match.flipkart_price &&
+          Date.now() - new Date(match.prices_last_scraped).getTime() < 30 * 60 * 1000
+        ) {
+          console.log(`[DB Cache Hit] for: ${searchQuery}`);
+          return NextResponse.json({
+            product: searchQuery,
+            brand,
+            model,
+            stores: [
+              {
+                name: "Amazon",
+                price: match.amazon_price,
+                link: `https://www.amazon.in/s?k=${encodeURIComponent(searchQuery)}`,
+                source: "scraped",
+                confidence: 0.95
+              },
+              {
+                name: "Flipkart",
+                price: match.flipkart_price,
+                link: `https://www.flipkart.com/search?q=${encodeURIComponent(searchQuery)}`,
+                source: "scraped",
+                confidence: 0.95
+              }
+            ]
+          });
+        }
       }
     } catch (dbError) {
       console.error("Database lookup failed inside prices API", dbError);
     }
 
-    // 2. Fetch raw HTML concurrently
+    // 3. Cache missed. Perform scraping concurrently.
     const [amazonScraped, flipkartScraped] = await Promise.allSettled([
       scrapeAmazonHtml(searchQuery),
       scrapeFlipkartHtml(searchQuery)
@@ -135,24 +201,21 @@ export async function GET(request: Request) {
     const amazonHtml = amazonScraped.status === "fulfilled" ? amazonScraped.value : null;
     const flipkartHtml = flipkartScraped.status === "fulfilled" ? flipkartScraped.value : null;
 
-    // Heuristic: filter extracted price options by proximity to target DB price
     const findBestPrice = (html: string | null, targetPrice: number): number | null => {
       if (!html) return null;
-      
       const parsedPrices = extractPricesFromHtml(html);
       if (parsedPrices.length === 0) return null;
 
-      // Filter prices: primary segment is between 70% and 145% of expected baseline
+      // Filter: primary segment within 70% to 145% of expected baseline
       let filtered = parsedPrices.filter(p => p >= targetPrice * 0.7 && p <= targetPrice * 1.45);
       
-      // Secondary fallback segment if empty: between 50% and 210%
+      // Fallback segment: within 50% to 210%
       if (filtered.length === 0) {
         filtered = parsedPrices.filter(p => p >= targetPrice * 0.5 && p <= targetPrice * 2.1);
       }
 
       if (filtered.length === 0) return null;
 
-      // Sort by absolute proximity to baseline price, picking the closest match
       filtered.sort((a, b) => Math.abs(a - targetPrice) - Math.abs(b - targetPrice));
       return filtered[0];
     };
@@ -160,7 +223,10 @@ export async function GET(request: Request) {
     let amazonPrice = findBestPrice(amazonHtml, baseDbPrice);
     let flipkartPrice = findBestPrice(flipkartHtml, baseDbPrice);
 
-    // 3. Fallback mock simulator if scrapers were blocked
+    const isAmazonScraped = !!amazonPrice;
+    const isFlipkartScraped = !!flipkartPrice;
+
+    // Fallbacks with variance if scrapers are blocked/throttled
     if (!amazonPrice) {
       const variance = Math.floor(baseDbPrice * (Math.random() * 0.03 - 0.01));
       amazonPrice = baseDbPrice + variance;
@@ -171,9 +237,53 @@ export async function GET(request: Request) {
       flipkartPrice = baseDbPrice + variance;
     }
 
-    // Round to nearest 10 for clean display
+    // Round to nearest 10 for clean look
     amazonPrice = Math.round(amazonPrice / 10) * 10;
     flipkartPrice = Math.round(flipkartPrice / 10) * 10;
+
+    const amazonSource = isAmazonScraped ? "scraped" : "fallback";
+    const amazonConfidence = isAmazonScraped ? 0.92 : 0.45;
+
+    const flipkartSource = isFlipkartScraped ? "scraped" : "fallback";
+    const flipkartConfidence = isFlipkartScraped ? 0.92 : 0.45;
+
+    // 4. Update the caches (Supabase remote DB or local memory fallback)
+    const scrapeSuccess = isAmazonScraped || isFlipkartScraped;
+    if (scrapeSuccess) {
+      let dbUpdated = false;
+
+      if (matchedPhoneId) {
+        try {
+          const { error: updateError } = await (supabase.from("phones") as any)
+            .update({
+              amazon_price: amazonPrice,
+              flipkart_price: flipkartPrice,
+              prices_last_scraped: new Date().toISOString()
+            })
+            .eq("id", matchedPhoneId);
+
+          if (!updateError) {
+            dbUpdated = true;
+            console.log(`[DB Cache Updated] for ID: ${matchedPhoneId}`);
+          } else {
+            console.warn(`DB cache update returned error: ${updateError.message}`);
+          }
+        } catch (dbErr) {
+          console.warn("DB cache columns not supported yet, falling back to memory cache.");
+        }
+      }
+
+      if (!dbUpdated) {
+        memoryCache.set(queryKey, {
+          amazonPrice,
+          flipkartPrice,
+          source: "scraped",
+          confidence: 0.92,
+          timestamp: Date.now()
+        });
+        console.log(`[Memory Cache Updated] for: ${searchQuery}`);
+      }
+    }
 
     return NextResponse.json({
       product: searchQuery,
@@ -183,12 +293,16 @@ export async function GET(request: Request) {
         {
           name: "Amazon",
           price: amazonPrice,
-          link: `https://www.amazon.in/s?k=${encodeURIComponent(searchQuery)}`
+          link: `https://www.amazon.in/s?k=${encodeURIComponent(searchQuery)}`,
+          source: amazonSource,
+          confidence: amazonConfidence
         },
         {
           name: "Flipkart",
           price: flipkartPrice,
-          link: `https://www.flipkart.com/search?q=${encodeURIComponent(searchQuery)}`
+          link: `https://www.flipkart.com/search?q=${encodeURIComponent(searchQuery)}`,
+          source: flipkartSource,
+          confidence: flipkartConfidence
         }
       ]
     });
