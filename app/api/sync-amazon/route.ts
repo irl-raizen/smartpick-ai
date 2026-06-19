@@ -25,7 +25,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = 400
 }
 
 async function scrapeAmazonHtml(query: string): Promise<string | null> {
-  const url = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+  const url = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   
   try {
@@ -65,32 +65,34 @@ async function scrapeFlipkartHtml(query: string): Promise<string | null> {
   }
 }
 
-function extractPricesFromHtml(html: string): number[] {
+function extractPricesFromHtml(html: string, storeName: string): number[] {
   const prices: number[] = [];
   let match;
 
-  const currencyRegex = /(?:₹|Rs\.?)\s?([\d,]+)/gi;
-  while ((match = currencyRegex.exec(html)) !== null) {
-    const val = parseInt(match[1].replace(/,/g, ""), 10);
-    if (!isNaN(val) && val > 0) {
-      prices.push(val);
+  if (storeName.toLowerCase() === "amazon") {
+    const amazonWholeRegex = /class="a-price-whole">([\d,]+)/gi;
+    while ((match = amazonWholeRegex.exec(html)) !== null) {
+      const val = parseInt(match[1].replace(/,/g, ""), 10);
+      if (!isNaN(val) && val > 0) {
+        prices.push(val);
+      }
     }
-  }
-
-  const amazonWholeRegex = /class="a-price-whole">([\d,]+)/gi;
-  while ((match = amazonWholeRegex.exec(html)) !== null) {
-    const val = parseInt(match[1].replace(/,/g, ""), 10);
-    if (!isNaN(val) && val > 0) {
-      prices.push(val);
+  } else {
+    const currencyRegex = /(?:₹|Rs\.?)\s?([\d,]+)/gi;
+    while ((match = currencyRegex.exec(html)) !== null) {
+      const val = parseInt(match[1].replace(/,/g, ""), 10);
+      if (!isNaN(val) && val > 0) {
+        prices.push(val);
+      }
     }
   }
 
   return prices;
 }
 
-const findBestPrice = (html: string | null, targetPrice: number): number | null => {
+const findBestPrice = (html: string | null, targetPrice: number, storeName: string): number | null => {
   if (!html) return null;
-  const parsedPrices = extractPricesFromHtml(html);
+  const parsedPrices = extractPricesFromHtml(html, storeName);
   if (parsedPrices.length === 0) return null;
 
   let filtered = parsedPrices.filter(p => p >= targetPrice * 0.7 && p <= targetPrice * 1.45);
@@ -166,8 +168,8 @@ export async function POST(request: Request) {
         const amazonHtml = amazonScraped.status === "fulfilled" ? amazonScraped.value : null;
         const flipkartHtml = flipkartScraped.status === "fulfilled" ? flipkartScraped.value : null;
 
-        const amazonPrice = findBestPrice(amazonHtml, phone.price);
-        const flipkartPrice = findBestPrice(flipkartHtml, phone.price);
+        const amazonPrice = findBestPrice(amazonHtml, phone.price, "Amazon");
+        const flipkartPrice = findBestPrice(flipkartHtml, phone.price, "Flipkart");
 
         const amazonAvailable = !!amazonPrice && checkAvailability(amazonHtml);
         const flipkartAvailable = !!flipkartPrice && checkAvailability(flipkartHtml);
