@@ -24,11 +24,31 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = 400
   }
 }
 
+// In-memory rate limiter state
+const ipRequests = new Map<string, { count: number; resetTime: number }>();
+
+function isRateLimited(ip: string, limit = 30, windowMs = 60000): boolean {
+  const now = Date.now();
+  const clientData = ipRequests.get(ip);
+  
+  if (!clientData || now > clientData.resetTime) {
+    ipRequests.set(ip, { count: 1, resetTime: now + windowMs });
+    return false;
+  }
+  
+  if (clientData.count >= limit) {
+    return true;
+  }
+  
+  clientData.count++;
+  return false;
+}
+
 async function scrapeAmazonHtml(query: string): Promise<string | null> {
-  const url = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
+  const searchUrl = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   try {
-    const res = await fetchWithTimeout(url, {
+    const searchRes = await fetchWithTimeout(searchUrl, {
       headers: {
         "User-Agent": userAgent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -36,9 +56,37 @@ async function scrapeAmazonHtml(query: string): Promise<string | null> {
         "Cache-Control": "max-age=0",
       }
     });
-    if (!res.ok) return null;
-    return await res.text();
+    if (!searchRes.ok) return null;
+    const searchHtml = await searchRes.text();
+
+    // Extract first organic ASIN
+    const asinMatch = searchHtml.match(/\/dp\/([A-Z0-9]{10})/i) || searchHtml.match(/data-asin="([A-Z0-9]{10})"/i);
+    if (!asinMatch) {
+      console.warn(`No ASIN found for query: ${query}, using search results HTML.`);
+      return searchHtml;
+    }
+
+    const asin = asinMatch[1];
+    const productUrl = `https://www.amazon.in/dp/${asin}`;
+    console.log(`Scraping direct Amazon page for ASIN: ${asin} (${productUrl})`);
+
+    const dpRes = await fetchWithTimeout(productUrl, {
+      headers: {
+        "User-Agent": userAgent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "max-age=0",
+      }
+    });
+
+    if (!dpRes.ok) {
+      console.warn(`ASIN fetch failed for ${asin}, falling back to search results HTML.`);
+      return searchHtml;
+    }
+
+    return await dpRes.text();
   } catch (e) {
+    console.error(`Amazon scraping failed:`, e);
     return null;
   }
 }
@@ -276,24 +324,114 @@ async function syncStoreData(
           new_price: newPrice,
           changed_at: nowIso
         });
+
       if (histErr) {
         console.error("Failed to insert price history", histErr);
       }
+    }
+
+    // Check and trigger active price drop alerts for this phone
+    if (available && newPrice > 0) {
+      await checkAndTriggerPriceAlerts(phoneId, newPrice);
     }
   } catch (error) {
     console.error(`Sync error for store ${storeName}`, error);
   }
 }
 
-function scoreMatch(query: string, brand: string, model: string): number {
+async function checkAndTriggerPriceAlerts(phoneId: number | string, newPrice: number) {
+  try {
+    const pId = typeof phoneId === "string" ? parseInt(phoneId, 10) : phoneId;
+    if (isNaN(pId)) return;
+
+    // Fetch phone details first
+    const { data: phone } = await (supabase.from("phones") as any)
+      .select("brand, model")
+      .eq("id", pId)
+      .maybeSingle();
+
+    if (!phone) return;
+
+    // Query active alerts for this phone where target_price >= newPrice
+    const { data: alerts } = await (supabase.from("price_alerts") as any)
+      .select("id, email, target_price")
+      .eq("phone_id", pId)
+      .eq("is_triggered", false)
+      .eq("enabled", true)
+      .gte("target_price", newPrice);
+
+    if (alerts && alerts.length > 0) {
+      for (const alert of alerts) {
+        console.log(`\n==================================================`);
+        console.log(`🔥 PRICE ALERT TRIGGERED:`);
+        console.log(`   Smartphone : ${phone.brand} ${phone.model}`);
+        console.log(`   User Email : ${alert.email}`);
+        console.log(`   Target     : ₹${Number(alert.target_price).toLocaleString("en-IN")}`);
+        console.log(`   Current    : ₹${newPrice.toLocaleString("en-IN")}`);
+        console.log(`   Action     : Simulated alert email sent to ${alert.email}!`);
+        console.log(`==================================================\n`);
+
+        // Mark alert as triggered
+        await (supabase.from("price_alerts") as any)
+          .update({
+            is_triggered: true,
+            triggered_at: new Date().toISOString()
+          })
+          .eq("id", alert.id);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to run price alerts check:", error);
+  }
+}
+
+function getLevenshteinDistance(a: string, b: string): number {
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1, // deletion
+        matrix[i][j - 1] + 1, // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+}
+
+function scoreMatch(query: string, brand: string, model: string, aliasesStr: string | null = null): number {
   const q = query.toLowerCase().trim();
   const b = brand.toLowerCase().trim();
   const m = model.toLowerCase().trim();
   const bm = `${b} ${m}`;
 
-  // 1. Exact match (highest priority)
+  const qNoSpaces = q.replace(/\s+/g, "");
+  const mNoSpaces = m.replace(/\s+/g, "");
+  const bmNoSpaces = bm.replace(/\s+/g, "");
+
+  let maxScore = 0;
+
+  // 1. Exact Matches (Highest Priority)
   if (q === bm) return 1000;
-  if (q === m) return 900;
+  if (q === m) return 950;
+
+  // 2. Alias exact matches
+  if (aliasesStr) {
+    const aliasList = aliasesStr.split(",").map(a => a.trim().toLowerCase());
+    if (aliasList.includes(q)) return 980;
+    if (aliasList.some(a => a.replace(/\s+/g, "") === qNoSpaces)) return 920;
+  }
+
+  // 2. Missing Spaces Matches (e.g. "iphone15" -> "iphone 15")
+  if (qNoSpaces === bmNoSpaces) return 900;
+  if (qNoSpaces === mNoSpaces) return 850;
 
   // Helper for word boundaries check
   const hasWordBoundary = (container: string, substring: string) => {
@@ -305,29 +443,120 @@ function scoreMatch(query: string, brand: string, model: string): number {
     }
   };
 
-  // 2. Query contains brand + model or model
+  // 3. Global Levenshtein match (distance <= 2)
+  const distBM = getLevenshteinDistance(q, bm);
+  const distM = getLevenshteinDistance(q, m);
+  if (distBM <= 2) {
+    const score = 800 - distBM * 10;
+    if (score > maxScore) maxScore = score;
+  }
+  if (distM <= 2) {
+    const score = 750 - distM * 10;
+    if (score > maxScore) maxScore = score;
+  }
+
+  // 4. Substring inclusion (exact)
   if (q.includes(bm)) {
-    return 500 + bm.length + (hasWordBoundary(q, bm) ? 100 : 0);
+    const score = 600 + bm.length + (hasWordBoundary(q, bm) ? 100 : 0);
+    if (score > maxScore) maxScore = score;
   }
   if (q.includes(m)) {
-    return 400 + m.length + (hasWordBoundary(q, m) ? 100 : 0);
+    const score = 550 + m.length + (hasWordBoundary(q, m) ? 100 : 0);
+    if (score > maxScore) maxScore = score;
   }
-
-  // 3. Brand + model or model contains the query
   if (bm.includes(q)) {
-    const coverage = q.length / bm.length;
-    return 200 + coverage * 100 + (hasWordBoundary(bm, q) ? 50 : 0);
+    const score = 450 + (q.length / bm.length) * 100 + (hasWordBoundary(bm, q) ? 50 : 0);
+    if (score > maxScore) maxScore = score;
   }
   if (m.includes(q)) {
-    const coverage = q.length / m.length;
-    return 100 + coverage * 100 + (hasWordBoundary(m, q) ? 50 : 0);
+    const score = 400 + (q.length / m.length) * 100 + (hasWordBoundary(m, q) ? 50 : 0);
+    if (score > maxScore) maxScore = score;
   }
 
-  return 0;
+  // 5. Substring inclusion (no spaces)
+  if (qNoSpaces.includes(bmNoSpaces)) {
+    const score = 350 + bmNoSpaces.length;
+    if (score > maxScore) maxScore = score;
+  }
+  if (qNoSpaces.includes(mNoSpaces)) {
+    const score = 300 + mNoSpaces.length;
+    if (score > maxScore) maxScore = score;
+  }
+  if (bmNoSpaces.includes(qNoSpaces)) {
+    const score = 250 + (qNoSpaces.length / bmNoSpaces.length) * 100;
+    if (score > maxScore) maxScore = score;
+  }
+  if (mNoSpaces.includes(qNoSpaces)) {
+    const score = 200 + (qNoSpaces.length / mNoSpaces.length) * 100;
+    if (score > maxScore) maxScore = score;
+  }
+
+  // 6. Word-by-word token matching (typo tolerant)
+  const qTokens = q.split(/\s+/).filter(t => t.length > 0);
+  const mTokens = m.split(/\s+/).filter(t => t.length > 0);
+  const bmTokens = bm.split(/\s+/).filter(t => t.length > 0);
+
+  if (qTokens.length > 0) {
+    // Check against brand + model tokens
+    let allTokensMatchedBM = true;
+    let totalDistBM = 0;
+    for (const qToken of qTokens) {
+      let minDist = Infinity;
+      for (const bmToken of bmTokens) {
+        const dist = getLevenshteinDistance(qToken, bmToken);
+        if (dist < minDist) {
+          minDist = dist;
+        }
+      }
+      if (minDist > 2) {
+        allTokensMatchedBM = false;
+        break;
+      }
+      totalDistBM += minDist;
+    }
+
+    if (allTokensMatchedBM) {
+      const coverage = qTokens.length / bmTokens.length;
+      const tokenScore = 500 - totalDistBM * 15 + coverage * 50;
+      if (tokenScore > maxScore) maxScore = tokenScore;
+    }
+
+    // Check against model tokens only
+    let allTokensMatchedM = true;
+    let totalDistM = 0;
+    for (const qToken of qTokens) {
+      let minDist = Infinity;
+      for (const mToken of mTokens) {
+        const dist = getLevenshteinDistance(qToken, mToken);
+        if (dist < minDist) {
+          minDist = dist;
+        }
+      }
+      if (minDist > 2) {
+        allTokensMatchedM = false;
+        break;
+      }
+      totalDistM += minDist;
+    }
+
+    if (allTokensMatchedM) {
+      const coverage = qTokens.length / mTokens.length;
+      const tokenScore = 450 - totalDistM * 15 + coverage * 50;
+      if (tokenScore > maxScore) maxScore = tokenScore;
+    }
+  }
+
+  return maxScore;
 }
 
 export async function GET(request: Request) {
   try {
+    // 0. Rate Limiting Check (30 requests / minute / IP)
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+    if (isRateLimited(ip)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q");
 
@@ -337,15 +566,19 @@ export async function GET(request: Request) {
 
     const searchQuery = q.trim();
 
-    // 1. Fetch all phones from Supabase
-    const phones = await getPhones();
+    // 1. Fetch all phones and search index entries separately
+    const [phones, { data: searchIndex }] = await Promise.all([
+      getPhones(),
+      (supabase.from("phones_search_index") as any).select("phone_id, search_terms, aliases")
+    ]);
 
-    // 2. Find matching phone in our database using scored match system
+    // 2. Find matching phone in our database using scored match system with aliases
     let bestMatch: typeof phones[0] | null = null;
     let highestScore = 0;
 
     for (const p of phones) {
-      const score = scoreMatch(searchQuery, p.brand, p.model);
+      const idxEntry = searchIndex?.find((si: any) => String(si.phone_id) === String(p.id));
+      const score = scoreMatch(searchQuery, p.brand, p.model, idxEntry?.aliases || null);
       if (score > highestScore) {
         highestScore = score;
         bestMatch = p;

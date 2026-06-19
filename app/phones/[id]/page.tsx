@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPhoneById, getPhones } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 import { LivePrices } from "@/src/components/LivePrices";
+import { PriceTrendsAndAlerts } from "@/src/components/PriceTrendsAndAlerts";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -331,6 +332,15 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
           {/* Right Detailed Specs & Scores Card */}
           <div className="lg:col-span-7 space-y-8">
+            {/* Price Trends & Alerts Widget */}
+            <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm shadow-2xl">
+              <PriceTrendsAndAlerts
+                phoneId={phone.id}
+                currentPrice={phone.price}
+                model={phone.model}
+              />
+            </div>
+
             {/* Scores Widget */}
             <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm space-y-6 shadow-2xl">
               <h2 className="text-lg font-bold text-white tracking-wide border-b border-zinc-850 pb-3">

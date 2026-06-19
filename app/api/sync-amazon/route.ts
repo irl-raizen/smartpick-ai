@@ -24,12 +24,31 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = 400
   }
 }
 
-async function scrapeAmazonHtml(query: string): Promise<string | null> {
-  const url = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
-  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+// In-memory rate limiter state
+const ipRequests = new Map<string, { count: number; resetTime: number }>();
+
+function isRateLimited(ip: string, limit = 30, windowMs = 60000): boolean {
+  const now = Date.now();
+  const clientData = ipRequests.get(ip);
   
+  if (!clientData || now > clientData.resetTime) {
+    ipRequests.set(ip, { count: 1, resetTime: now + windowMs });
+    return false;
+  }
+  
+  if (clientData.count >= limit) {
+    return true;
+  }
+  
+  clientData.count++;
+  return false;
+}
+
+async function scrapeAmazonHtml(query: string): Promise<string | null> {
+  const searchUrl = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
+  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   try {
-    const res = await fetchWithTimeout(url, {
+    const searchRes = await fetchWithTimeout(searchUrl, {
       headers: {
         "User-Agent": userAgent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -37,10 +56,37 @@ async function scrapeAmazonHtml(query: string): Promise<string | null> {
         "Cache-Control": "max-age=0",
       }
     });
+    if (!searchRes.ok) return null;
+    const searchHtml = await searchRes.text();
 
-    if (!res.ok) return null;
-    return await res.text();
+    // Extract first organic ASIN
+    const asinMatch = searchHtml.match(/\/dp\/([A-Z0-9]{10})/i) || searchHtml.match(/data-asin="([A-Z0-9]{10})"/i);
+    if (!asinMatch) {
+      console.warn(`No ASIN found for query: ${query}, using search results HTML.`);
+      return searchHtml;
+    }
+
+    const asin = asinMatch[1];
+    const productUrl = `https://www.amazon.in/dp/${asin}`;
+    console.log(`Scraping direct Amazon page for ASIN: ${asin} (${productUrl})`);
+
+    const dpRes = await fetchWithTimeout(productUrl, {
+      headers: {
+        "User-Agent": userAgent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "max-age=0",
+      }
+    });
+
+    if (!dpRes.ok) {
+      console.warn(`ASIN fetch failed for ${asin}, falling back to search results HTML.`);
+      return searchHtml;
+    }
+
+    return await dpRes.text();
   } catch (e) {
+    console.error(`Amazon scraping failed:`, e);
     return null;
   }
 }
@@ -122,8 +168,248 @@ function checkAvailability(html: string | null): boolean {
   return true;
 }
 
+function getAvailabilityDetails(html: string | null, isScraped: boolean): { available: boolean; message: string } {
+  if (!isScraped || !html) {
+    return { available: true, message: "Unable to verify availability" };
+  }
+  const text = html.toLowerCase();
+  if (text.includes("currently unavailable")) {
+    return { available: false, message: "Currently unavailable" };
+  }
+  if (text.includes("out of stock") || text.includes("sold out")) {
+    return { available: false, message: "Out of stock" };
+  }
+  if (text.includes("temporarily out of stock")) {
+    return { available: false, message: "Temporarily out of stock" };
+  }
+  return { available: true, message: "In stock" };
+}
+
+function detectScrapeError(html: string | null): string | null {
+  if (html === null) return "timeout";
+  const text = html.toLowerCase();
+  if (text.includes("access denied") || text.includes("robot check") || text.includes("captcha") || text.includes("automated access")) {
+    return "blocked";
+  }
+  return "parser_error";
+}
+
+function generateAmazonAffiliateUrl(html: string | null, query: string, dbCustomLink: string | undefined): { productUrl: string, affiliateUrl: string } {
+  const searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+  
+  if (dbCustomLink && dbCustomLink.trim() !== "" && (dbCustomLink.includes("amzn.to") || dbCustomLink.includes("tag="))) {
+    return { productUrl: dbCustomLink, affiliateUrl: dbCustomLink };
+  }
+
+  let productUrl = searchUrl;
+  if (html) {
+    const dpMatch = html.match(/\/dp\/([A-Z0-9]{10})/i);
+    if (dpMatch) {
+      productUrl = `https://www.amazon.in/dp/${dpMatch[1]}`;
+    }
+  }
+
+  try {
+    const urlObj = new URL(productUrl);
+    urlObj.searchParams.set("tag", process.env.AMAZON_ASSOCIATE_TAG || "smartpickai-21");
+    return { productUrl, affiliateUrl: urlObj.toString() };
+  } catch (e) {
+    const separator = productUrl.includes("?") ? "&" : "?";
+    return { productUrl, affiliateUrl: `${productUrl}${separator}tag=${process.env.AMAZON_ASSOCIATE_TAG || "smartpickai-21"}` };
+  }
+}
+
+function generateFlipkartAffiliateUrl(html: string | null, query: string, dbCustomLink: string | undefined): { productUrl: string, affiliateUrl: string } {
+  const searchUrl = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
+  
+  if (dbCustomLink && dbCustomLink.trim() !== "" && dbCustomLink.includes("affid=")) {
+    return { productUrl: dbCustomLink, affiliateUrl: dbCustomLink };
+  }
+
+  let productUrl = searchUrl;
+  if (html) {
+    const fkUrlMatch = html.match(/"(\/[a-zA-Z0-9-]+\/p\/itm[a-zA-Z0-9]+)/i);
+    if (fkUrlMatch) {
+      productUrl = `https://www.flipkart.com${fkUrlMatch[1]}`;
+    } else {
+      const fkIdMatch = html.match(/\/p\/(itm[a-zA-Z0-9]+)/i);
+      if (fkIdMatch) {
+        productUrl = `https://www.flipkart.com/p/${fkIdMatch[1]}`;
+      }
+    }
+  }
+
+  const isEnabled = process.env.FLIPKART_AFFILIATE_ENABLED === "true";
+  if (!isEnabled) {
+    return { productUrl, affiliateUrl: productUrl };
+  }
+
+  try {
+    const urlObj = new URL(productUrl);
+    urlObj.searchParams.set("affid", process.env.FLIPKART_AFFILIATE_ID || "smartpickai");
+    return { productUrl, affiliateUrl: urlObj.toString() };
+  } catch (e) {
+    const separator = productUrl.includes("?") ? "&" : "?";
+    return { productUrl, affiliateUrl: `${productUrl}${separator}affid=${process.env.FLIPKART_AFFILIATE_ID || "smartpickai"}` };
+  }
+}
+
+async function syncStoreData(
+  phoneId: string, 
+  storeName: string, 
+  newPrice: number, 
+  available: boolean, 
+  productUrl: string, 
+  affiliateUrl: string, 
+  source: string,
+  scrapeStatus: string,
+  scrapeError: string | null,
+  availabilityMessage: string
+) {
+  try {
+    const { data: existingPrice, error: fetchErr } = await (supabase.from("store_prices") as any)
+      .select("id, price")
+      .eq("phone_id", phoneId)
+      .eq("store_name", storeName)
+      .maybeSingle() as { data: { id: string; price: number } | null; error: any };
+
+    if (fetchErr) {
+      console.error(`Failed to fetch store price for ${storeName}`, fetchErr);
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+
+    if (existingPrice) {
+      const oldPrice = Number(existingPrice.price);
+      if (oldPrice !== newPrice) {
+        const { error: histErr } = await (supabase.from("price_history") as any)
+          .insert({
+            phone_id: phoneId,
+            store_name: storeName,
+            old_price: oldPrice,
+            new_price: newPrice,
+            changed_at: nowIso
+          });
+        if (histErr) {
+          console.error("Failed to insert price history", histErr);
+        }
+      }
+
+      const { error: updateErr } = await (supabase.from("store_prices") as any)
+        .update({
+          price: newPrice,
+          available: available,
+          product_url: productUrl,
+          affiliate_url: affiliateUrl,
+          source: source,
+          last_updated: nowIso,
+          scrape_status: scrapeStatus,
+          scrape_error: scrapeError,
+          scraped_at: scrapeStatus === "success" ? nowIso : null,
+          availability_message: availabilityMessage
+        })
+        .eq("id", existingPrice.id);
+      if (updateErr) {
+        console.error(`Failed to update store price for ${storeName}`, updateErr);
+      }
+    } else {
+      const { error: insertErr } = await (supabase.from("store_prices") as any)
+        .insert({
+          phone_id: phoneId,
+          store_name: storeName,
+          price: newPrice,
+          available: available,
+          product_url: productUrl,
+          affiliate_url: affiliateUrl,
+          source: source,
+          last_updated: nowIso,
+          scrape_status: scrapeStatus,
+          scrape_error: scrapeError,
+          scraped_at: scrapeStatus === "success" ? nowIso : null,
+          availability_message: availabilityMessage
+        });
+
+      if (insertErr) {
+        console.error(`Failed to insert store price for ${storeName}`, insertErr);
+      }
+
+      const { error: histErr } = await (supabase.from("price_history") as any)
+        .insert({
+          phone_id: phoneId,
+          store_name: storeName,
+          old_price: null,
+          new_price: newPrice,
+          changed_at: nowIso
+        });
+      if (histErr) {
+        console.error("Failed to insert price history", histErr);
+      }
+    }
+
+    // Check and trigger active price drop alerts for this phone
+    if (available && newPrice > 0) {
+      await checkAndTriggerPriceAlerts(phoneId, newPrice);
+    }
+  } catch (error) {
+    console.error(`Sync error for store ${storeName}`, error);
+  }
+}
+
+async function checkAndTriggerPriceAlerts(phoneId: number | string, newPrice: number) {
+  try {
+    const pId = typeof phoneId === "string" ? parseInt(phoneId, 10) : phoneId;
+    if (isNaN(pId)) return;
+
+    // Fetch phone details first
+    const { data: phone } = await (supabase.from("phones") as any)
+      .select("brand, model")
+      .eq("id", pId)
+      .maybeSingle();
+
+    if (!phone) return;
+
+    // Query active alerts for this phone where target_price >= newPrice
+    const { data: alerts } = await (supabase.from("price_alerts") as any)
+      .select("id, email, target_price")
+      .eq("phone_id", pId)
+      .eq("is_triggered", false)
+      .eq("enabled", true)
+      .gte("target_price", newPrice);
+
+    if (alerts && alerts.length > 0) {
+      for (const alert of alerts) {
+        console.log(`\n==================================================`);
+        console.log(`🔥 PRICE ALERT TRIGGERED:`);
+        console.log(`   Smartphone : ${phone.brand} ${phone.model}`);
+        console.log(`   User Email : ${alert.email}`);
+        console.log(`   Target     : ₹${Number(alert.target_price).toLocaleString("en-IN")}`);
+        console.log(`   Current    : ₹${newPrice.toLocaleString("en-IN")}`);
+        console.log(`   Action     : Simulated alert email sent to ${alert.email}!`);
+        console.log(`==================================================\n`);
+
+        // Mark alert as triggered
+        await (supabase.from("price_alerts") as any)
+          .update({
+            is_triggered: true,
+            triggered_at: new Date().toISOString()
+          })
+          .eq("id", alert.id);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to run price alerts check:", error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
+    // 0. Rate Limiting Check (30 requests / minute / IP)
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+    if (isRateLimited(ip)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
     const apiKeyHeader = request.headers.get("x-api-key");
     const configuredApiKey = process.env.N8N_API_KEY;
 
@@ -204,6 +490,46 @@ export async function POST(request: Request) {
         } catch (dbErr) {
           console.warn("DB update failed during sync.");
         }
+
+        // Sync store-specific prices, history, and alerts to maintain database consistency
+        const finalAmazonPrice = amazonPrice ? Math.round(amazonPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.98)) / 10) * 10;
+        const amazonAvailDetails = getAvailabilityDetails(amazonHtml, !!amazonPrice);
+        const amazonUrls = generateAmazonAffiliateUrl(amazonHtml, query, phone.amazon_link);
+        const amazonScrapeStatus = amazonPrice ? "success" : "failed";
+        const amazonScrapeError = amazonPrice ? null : detectScrapeError(amazonHtml);
+
+        const finalFlipkartPrice = flipkartPrice ? Math.round(flipkartPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.97)) / 10) * 10;
+        const flipkartAvailDetails = getAvailabilityDetails(flipkartHtml, !!flipkartPrice);
+        const flipkartUrls = generateFlipkartAffiliateUrl(flipkartHtml, query, phone.flipkart_link);
+        const flipkartScrapeStatus = flipkartPrice ? "success" : "failed";
+        const flipkartScrapeError = flipkartPrice ? null : detectScrapeError(flipkartHtml);
+
+        await Promise.all([
+          syncStoreData(
+            phone.id,
+            "Amazon",
+            finalAmazonPrice,
+            amazonAvailDetails.available,
+            amazonUrls.productUrl,
+            amazonUrls.affiliateUrl,
+            amazonPrice ? "scraped" : "fallback",
+            amazonScrapeStatus,
+            amazonScrapeError,
+            amazonAvailDetails.message
+          ),
+          syncStoreData(
+            phone.id,
+            "Flipkart",
+            finalFlipkartPrice,
+            flipkartAvailDetails.available,
+            flipkartUrls.productUrl,
+            flipkartUrls.affiliateUrl,
+            flipkartPrice ? "scraped" : "fallback",
+            flipkartScrapeStatus,
+            flipkartScrapeError,
+            flipkartAvailDetails.message
+          )
+        ]);
 
         return {
           id: phone.id,
