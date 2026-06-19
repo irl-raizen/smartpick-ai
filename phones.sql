@@ -6,6 +6,8 @@ ALTER TABLE phones ADD COLUMN IF NOT EXISTS ai_review TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS amazon_price INTEGER;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS flipkart_price INTEGER;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS prices_last_scraped TIMESTAMPTZ;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS amazon_available BOOLEAN DEFAULT TRUE;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS flipkart_available BOOLEAN DEFAULT TRUE;
 
 -- Create articles table for AI content engine
 CREATE TABLE IF NOT EXISTS articles (

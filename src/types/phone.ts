@@ -17,4 +17,6 @@ export type Phone = {
   amazon_price?: number;
   flipkart_price?: number;
   prices_last_scraped?: string;
+  amazon_available?: boolean;
+  flipkart_available?: boolean;
 };

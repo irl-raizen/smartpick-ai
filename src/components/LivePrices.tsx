@@ -8,6 +8,7 @@ type StorePrice = {
   link: string;
   source: "scraped" | "fallback";
   confidence: number;
+  available?: boolean;
 };
 
 type PricesData = {
@@ -82,6 +83,30 @@ export function LivePrices({
         {data.stores.map((store) => {
           const isAmazon = store.name.toLowerCase() === "amazon";
           const link = getStoreLink(store.name, store.link);
+          const isAvailable = store.available !== false;
+
+          if (!isAvailable) {
+            return (
+              <div
+                key={store.name}
+                className="flex-1 text-center rounded-xl px-4 py-2.5 text-xs font-bold border border-zinc-850 bg-zinc-900/30 text-zinc-500 flex flex-col justify-center items-center gap-1 cursor-not-allowed select-none shadow-inner"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="opacity-80">{store.name}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                    Out of Stock
+                  </span>
+                  <span className="text-[8px] font-medium tracking-wide uppercase text-zinc-600 mt-0.5">
+                    Currently Unavailable
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
           const bgClass = isAmazon
             ? "bg-orange-600/90 hover:bg-orange-650 text-white"
             : "bg-blue-600/90 hover:bg-blue-650 text-white";
