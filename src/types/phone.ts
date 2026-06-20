@@ -19,4 +19,6 @@ export type Phone = {
   prices_last_scraped?: string;
   amazon_available?: boolean;
   flipkart_available?: boolean;
+  active?: boolean;
+  market_status?: string;
 };

@@ -334,6 +334,29 @@ async function syncStoreData(
     if (available && newPrice > 0) {
       await checkAndTriggerPriceAlerts(phoneId, newPrice);
     }
+
+    // Recalculate phone active and market_status based on store_prices
+    try {
+      const { data: stores, error: storesErr } = await (supabase.from("store_prices") as any)
+        .select("available")
+        .eq("phone_id", phoneId);
+      
+      if (!storesErr && stores && stores.length > 0) {
+        const hasAvailableStore = stores.some((s: any) => s.available === true);
+        const { error: phoneUpdateErr } = await (supabase.from("phones") as any)
+          .update({
+            active: hasAvailableStore,
+            market_status: hasAvailableStore ? "ACTIVE" : "OUT_OF_STOCK"
+          })
+          .eq("id", phoneId);
+        
+        if (phoneUpdateErr) {
+          console.error(`Failed to update phone active status for ID ${phoneId}:`, phoneUpdateErr);
+        }
+      }
+    } catch (dbErr) {
+      console.error("Failed to update phone status:", dbErr);
+    }
   } catch (error) {
     console.error(`Sync error for store ${storeName}`, error);
   }

@@ -27,7 +27,7 @@ export async function getPhones(): Promise<Phone[]> {
   const { data, error } = await supabase
     .from("phones")
     .select(
-      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available",
+      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available, active, market_status",
     )
     .order("brand", { ascending: true })
     .order("model", { ascending: true });
@@ -68,7 +68,7 @@ export async function getPhoneById(id: string): Promise<Phone | null> {
   const { data, error } = await supabase
     .from("phones")
     .select(
-      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available",
+      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available, active, market_status",
     )
     .eq("id", id)
     .maybeSingle();

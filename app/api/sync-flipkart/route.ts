@@ -44,53 +44,25 @@ function isRateLimited(ip: string, limit = 30, windowMs = 60000): boolean {
   return false;
 }
 
-async function scrapeAmazonHtml(query: string): Promise<string | null> {
-  const searchUrl = `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(query)}`;
+async function scrapeFlipkartHtml(query: string): Promise<string | null> {
+  const url = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
   try {
-    const searchRes = await fetchWithTimeout(searchUrl, {
-      headers: {
-        "User-Agent": userAgent,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "max-age=0",
-      }
-    });
-    if (!searchRes.ok) return null;
-    const searchHtml = await searchRes.text();
-
-    // Extract first organic ASIN
-    const asinMatch = searchHtml.match(/\/dp\/([A-Z0-9]{10})/i) || searchHtml.match(/data-asin="([A-Z0-9]{10})"/i);
-    if (!asinMatch) {
-      console.warn(`No ASIN found for query: ${query}, using search results HTML.`);
-      return searchHtml;
-    }
-
-    const asin = asinMatch[1];
-    const productUrl = `https://www.amazon.in/dp/${asin}`;
-    console.log(`Scraping direct Amazon page for ASIN: ${asin} (${productUrl})`);
-
-    const dpRes = await fetchWithTimeout(productUrl, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         "User-Agent": userAgent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "max-age=0",
+        "Accept-Language": "en-US,en;q=0.5",
       }
     });
 
-    if (!dpRes.ok) {
-      console.warn(`ASIN fetch failed for ${asin}, falling back to search results HTML.`);
-      return searchHtml;
-    }
-
-    return await dpRes.text();
+    if (!res.ok) return null;
+    return await res.text();
   } catch (e) {
-    console.error(`Amazon scraping failed:`, e);
     return null;
   }
 }
-
 
 function extractPricesFromHtml(html: string, storeName: string): number[] {
   const prices: number[] = [];
@@ -175,31 +147,40 @@ function detectScrapeError(html: string | null): string | null {
   return "parser_error";
 }
 
-function generateAmazonAffiliateUrl(html: string | null, query: string, dbCustomLink: string | undefined): { productUrl: string, affiliateUrl: string } {
-  const searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+function generateFlipkartAffiliateUrl(html: string | null, query: string, dbCustomLink: string | undefined): { productUrl: string, affiliateUrl: string } {
+  const searchUrl = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
   
-  if (dbCustomLink && dbCustomLink.trim() !== "" && (dbCustomLink.includes("amzn.to") || dbCustomLink.includes("tag="))) {
+  if (dbCustomLink && dbCustomLink.trim() !== "" && dbCustomLink.includes("affid=")) {
     return { productUrl: dbCustomLink, affiliateUrl: dbCustomLink };
   }
 
   let productUrl = searchUrl;
   if (html) {
-    const dpMatch = html.match(/\/dp\/([A-Z0-9]{10})/i);
-    if (dpMatch) {
-      productUrl = `https://www.amazon.in/dp/${dpMatch[1]}`;
+    const fkUrlMatch = html.match(/"(\/[a-zA-Z0-9-]+\/p\/itm[a-zA-Z0-9]+)/i);
+    if (fkUrlMatch) {
+      productUrl = `https://www.flipkart.com${fkUrlMatch[1]}`;
+    } else {
+      const fkIdMatch = html.match(/\/p\/(itm[a-zA-Z0-9]+)/i);
+      if (fkIdMatch) {
+        productUrl = `https://www.flipkart.com/p/${fkIdMatch[1]}`;
+      }
     }
+  }
+
+  const isEnabled = process.env.FLIPKART_AFFILIATE_ENABLED === "true";
+  if (!isEnabled) {
+    return { productUrl, affiliateUrl: productUrl };
   }
 
   try {
     const urlObj = new URL(productUrl);
-    urlObj.searchParams.set("tag", process.env.AMAZON_ASSOCIATE_TAG || "smartpickai-21");
+    urlObj.searchParams.set("affid", process.env.FLIPKART_AFFILIATE_ID || "smartpickai");
     return { productUrl, affiliateUrl: urlObj.toString() };
   } catch (e) {
     const separator = productUrl.includes("?") ? "&" : "?";
-    return { productUrl, affiliateUrl: `${productUrl}${separator}tag=${process.env.AMAZON_ASSOCIATE_TAG || "smartpickai-21"}` };
+    return { productUrl, affiliateUrl: `${productUrl}${separator}affid=${process.env.FLIPKART_AFFILIATE_ID || "smartpickai"}` };
   }
 }
-
 
 async function syncStoreData(
   phoneId: string, 
@@ -415,25 +396,25 @@ export async function POST(request: Request) {
       const batchPromises = batch.map(async (phone) => {
         const query = `${phone.brand} ${phone.model}`;
         
-        let amazonHtml = null;
+        let flipkartHtml = null;
         try {
-          amazonHtml = await scrapeAmazonHtml(query);
+          flipkartHtml = await scrapeFlipkartHtml(query);
         } catch (e) {
-          console.error(`Amazon scrape error for ${query}:`, e);
+          console.error(`Flipkart scrape error for ${query}:`, e);
         }
 
-        const amazonPrice = findBestPrice(amazonHtml, phone.price, "Amazon");
-        const amazonAvailable = !!amazonPrice && checkAvailability(amazonHtml);
+        const flipkartPrice = findBestPrice(flipkartHtml, phone.price, "Flipkart");
+        const flipkartAvailable = !!flipkartPrice && checkAvailability(flipkartHtml);
 
         const updatePayload: any = {
           prices_last_scraped: new Date().toISOString()
         };
 
-        if (amazonPrice) {
-          updatePayload.amazon_price = Math.round(amazonPrice / 10) * 10;
-          updatePayload.amazon_available = amazonAvailable;
+        if (flipkartPrice) {
+          updatePayload.flipkart_price = Math.round(flipkartPrice / 10) * 10;
+          updatePayload.flipkart_available = flipkartAvailable;
         } else {
-          updatePayload.amazon_available = false;
+          updatePayload.flipkart_available = false;
         }
 
         let dbSuccess = false;
@@ -450,32 +431,32 @@ export async function POST(request: Request) {
         }
 
         // Sync store-specific prices, history, and alerts to maintain database consistency
-        const finalAmazonPrice = amazonPrice ? Math.round(amazonPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.98)) / 10) * 10;
-        const amazonAvailDetails = getAvailabilityDetails(amazonHtml, !!amazonPrice);
-        const amazonUrls = generateAmazonAffiliateUrl(amazonHtml, query, phone.amazon_link);
-        const amazonScrapeStatus = amazonPrice ? "success" : "failed";
-        const amazonScrapeError = amazonPrice ? null : detectScrapeError(amazonHtml);
+        const finalFlipkartPrice = flipkartPrice ? Math.round(flipkartPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.97)) / 10) * 10;
+        const flipkartAvailDetails = getAvailabilityDetails(flipkartHtml, !!flipkartPrice);
+        const flipkartUrls = generateFlipkartAffiliateUrl(flipkartHtml, query, phone.flipkart_link);
+        const flipkartScrapeStatus = flipkartPrice ? "success" : "failed";
+        const flipkartScrapeError = flipkartPrice ? null : detectScrapeError(flipkartHtml);
 
         await syncStoreData(
           phone.id,
-          "Amazon",
-          finalAmazonPrice,
-          amazonAvailDetails.available,
-          amazonUrls.productUrl,
-          amazonUrls.affiliateUrl,
-          amazonPrice ? "scraped" : "fallback",
-          amazonScrapeStatus,
-          amazonScrapeError,
-          amazonAvailDetails.message
+          "Flipkart",
+          finalFlipkartPrice,
+          flipkartAvailDetails.available,
+          flipkartUrls.productUrl,
+          flipkartUrls.affiliateUrl,
+          flipkartPrice ? "scraped" : "fallback",
+          flipkartScrapeStatus,
+          flipkartScrapeError,
+          flipkartAvailDetails.message
         );
 
         return {
           id: phone.id,
           brand: phone.brand,
           model: phone.model,
-          amazon: {
-            price: updatePayload.amazon_price || null,
-            available: updatePayload.amazon_available
+          flipkart: {
+            price: updatePayload.flipkart_price || null,
+            available: updatePayload.flipkart_available
           },
           dbSuccess
         };
@@ -490,7 +471,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      message: "Amazon sync completed successfully.",
+      message: "Flipkart sync completed successfully.",
       syncedCount: results.length,
       phones: results
     });

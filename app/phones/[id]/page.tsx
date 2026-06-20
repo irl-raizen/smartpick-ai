@@ -248,7 +248,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
       "@type": "Offer",
       "price": phone.price,
       "priceCurrency": "INR",
-      "availability": "https://schema.org/InStock",
+      "availability": phone.active === false ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
       "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`
     }
   };
@@ -293,8 +293,13 @@ export default async function PhoneDetailPage({ params }: PageProps) {
               <span className="text-xs font-bold uppercase tracking-widest text-violet-400">
                 {phone.brand}
               </span>
-              <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">
-                {phone.model}
+              <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl flex flex-wrap items-center gap-3">
+                <span>{phone.model}</span>
+                {phone.active === false && (
+                  <span className="rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-0.5 text-xs font-bold text-rose-300 uppercase tracking-wider">
+                    Out of Stock
+                  </span>
+                )}
               </h1>
               <p className="mt-4 text-4xl font-extrabold text-white tracking-tight">
                 {formatPrice(phone.price)}
