@@ -34,6 +34,7 @@ function PhoneCard({ phone }: { phone: Phone }) {
           <img
             src={phone.image_url}
             alt={`${phone.brand} ${phone.model}`}
+            loading="lazy"
             className="h-full w-auto object-contain transition duration-300 group-hover:scale-105"
           />
         </div>

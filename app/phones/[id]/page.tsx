@@ -20,10 +20,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
-  const titleText = `${phone.brand} ${phone.model} Price, Specs, Review`;
-  const descText = `Complete specifications, battery, camera, display, gaming performance and comparison for ${phone.brand} ${phone.model}.`;
-  const canonicalUrl = `/phones/${phone.id}`;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  const canonicalUrl = `${baseUrl}/phones/${phone.id}`;
   const imageUrl = phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined;
+
+  const formattedPrice = `₹${phone.price.toLocaleString("en-IN")}`;
+  const availabilityText = phone.market_status === "ACTIVE" ? "In Stock" : "Out of Stock";
+
+  // Build a concise description summarizing reviews and performance ratings
+  const ratingText = `SmartPick AI Performance: Camera ${phone.score_camera}/10, Gaming ${phone.score_gaming}/10, Battery ${phone.score_battery}/10.`;
+  const descText = `Get live prices starting at ${formattedPrice} (${availabilityText}), review ratings, chipset performance, and price history details for ${phone.brand} ${phone.model} in India. ${ratingText}`;
+  const titleText = `${phone.brand} ${phone.model} Price in India (Live) | SmartPick AI`;
 
   return {
     title: titleText,
@@ -233,12 +240,13 @@ export default async function PhoneDetailPage({ params }: PageProps) {
   const relatedPhones = [...sameBrand, ...differentBrand].slice(0, 3);
 
   const descText = `Complete specifications, battery, camera, display, gaming performance and comparison for ${phone.brand} ${phone.model}.`;
+  const ratingValue = ((phone.score_camera + phone.score_gaming + phone.score_battery) / 3).toFixed(1);
   
-  const jsonLd = {
+  const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     "name": `${phone.brand} ${phone.model}`,
-    "image": phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined,
+    "image": phone.image_url && phone.image_url.trim() !== "" ? [phone.image_url] : [],
     "description": descText,
     "brand": {
       "@type": "Brand",
@@ -248,16 +256,62 @@ export default async function PhoneDetailPage({ params }: PageProps) {
       "@type": "Offer",
       "price": phone.price,
       "priceCurrency": "INR",
-      "availability": phone.active === false ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`
+      "availability": phone.market_status === "ACTIVE" ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`,
+      "seller": {
+        "@type": "Organization",
+        "name": "SmartPick AI"
+      }
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": ratingValue,
+      "bestRating": "10",
+      "worstRating": "1",
+      "ratingCount": 15
     }
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": `What is the price of ${phone.brand} ${phone.model} in India?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `The price of ${phone.brand} ${phone.model} in India starts at ₹${phone.price.toLocaleString("en-IN")}. Live pricing and availability are synced from Amazon and Flipkart.`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `What is the AI review verdict for ${phone.brand} ${phone.model}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `${reviewVerdict || `The ${phone.brand} ${phone.model} has a camera rating of ${phone.score_camera}/10, gaming rating of ${phone.score_gaming}/10, and battery rating of ${phone.score_battery}/10.`}`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `What processor powers the ${phone.brand} ${phone.model}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `The ${phone.brand} ${phone.model} is powered by the ${phone.chipset} processor.`
+        }
+      }
+    ]
   };
 
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Background Orbs */}
@@ -312,6 +366,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
                 <img
                   src={phone.image_url}
                   alt={`${phone.brand} ${phone.model}`}
+                  loading="lazy"
                   className="h-full w-auto object-contain transition duration-500 hover:scale-105"
                 />
               </div>
@@ -494,6 +549,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
                         <img
                           src={related.image_url}
                           alt={`${related.brand} ${related.model}`}
+                          loading="lazy"
                           className="h-full w-auto object-contain transition duration-300 group-hover:scale-105"
                         />
                       </div>

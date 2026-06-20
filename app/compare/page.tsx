@@ -1,28 +1,89 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { getPhones } from "@/src/lib/supabase";
+import { supabase, getPhones } from "@/src/lib/supabase";
 import { CompareCatalog } from "./CompareCatalog";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Compare Smartphones",
-  description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
-  alternates: {
-    canonical: "/compare",
-  },
-  openGraph: {
-    title: "Compare Smartphones - SmartPick AI",
-    description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
-    url: "/compare",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Compare Smartphones - SmartPick AI",
-    description: "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.",
+interface PageProps {
+  searchParams: Promise<{ phone1?: string; phone2?: string }>;
+}
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const p1Id = params.phone1;
+  const p2Id = params.phone2;
+
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  
+  // Construct absolute canonical URL with comparison parameters if present
+  const queryParams = new URLSearchParams();
+  if (p1Id) queryParams.set("phone1", p1Id);
+  if (p2Id) queryParams.set("phone2", p2Id);
+  const canonicalUrl = `${baseUrl}/compare${queryParams.toString() ? "?" + queryParams.toString() : ""}`;
+
+  let title = "Compare Smartphones";
+  let description = "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.";
+
+  if (p1Id || p2Id) {
+    try {
+      const ids: number[] = [];
+      if (p1Id) {
+        const id1 = parseInt(p1Id, 10);
+        if (!isNaN(id1)) ids.push(id1);
+      }
+      if (p2Id) {
+        const id2 = parseInt(p2Id, 10);
+        if (!isNaN(id2)) ids.push(id2);
+      }
+
+      if (ids.length > 0) {
+        const { data: phones } = await (supabase.from("phones") as any)
+          .select("id, brand, model")
+          .in("id", ids);
+
+        if (phones && phones.length > 0) {
+          const phone1Obj = p1Id ? phones.find((p: any) => String(p.id) === p1Id) : null;
+          const phone2Obj = p2Id ? phones.find((p: any) => String(p.id) === p2Id) : null;
+
+          if (phone1Obj && phone2Obj) {
+            title = `${phone1Obj.brand} ${phone1Obj.model} vs ${phone2Obj.brand} ${phone2Obj.model} Comparison`;
+            description = `Side-by-side specifications comparison for ${phone1Obj.brand} ${phone1Obj.model} and ${phone2Obj.brand} ${phone2Obj.model}. Check winner metrics for camera, gaming performance, battery, and price.`;
+          } else if (phone1Obj) {
+            title = `Compare ${phone1Obj.brand} ${phone1Obj.model}`;
+            description = `Compare specifications, ratings, and features of ${phone1Obj.brand} ${phone1Obj.model} side-by-side with other popular smartphones.`;
+          } else if (phone2Obj) {
+            title = `Compare ${phone2Obj.brand} ${phone2Obj.model}`;
+            description = `Compare specifications, ratings, and features of ${phone2Obj.brand} ${phone2Obj.model} side-by-side with other popular smartphones.`;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to generate metadata for compare page:", e);
+    }
   }
-};
+
+  const titleText = `${title} | SmartPick AI`;
+
+  return {
+    title: titleText,
+    description: description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: titleText,
+      description: description,
+      url: canonicalUrl,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: titleText,
+      description: description,
+    }
+  };
+}
 
 export default async function ComparePage() {
   const phones = await getPhones();

@@ -159,6 +159,7 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
                     <img
                       src={phone1.image_url}
                       alt={`${phone1.brand} ${phone1.model}`}
+                      loading="lazy"
                       className="h-full w-auto object-contain transition duration-500 hover:scale-105"
                     />
                   </div>
@@ -224,6 +225,7 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
                     <img
                       src={phone2.image_url}
                       alt={`${phone2.brand} ${phone2.model}`}
+                      loading="lazy"
                       className="h-full w-auto object-contain transition duration-500 hover:scale-105"
                     />
                   </div>
