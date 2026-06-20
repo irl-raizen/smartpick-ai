@@ -14,7 +14,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const p1Id = params.phone1;
   const p2Id = params.phone2;
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
   
   // Construct absolute canonical URL with comparison parameters if present
   const queryParams = new URLSearchParams();

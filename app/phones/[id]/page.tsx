@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
   const canonicalUrl = `${baseUrl}/phones/${generatePhoneSlug(phone.brand, phone.model)}`;
   const imageUrl = phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined;
 
@@ -233,7 +233,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
         "@type": "Organization",
         "name": "Amazon"
       },
-      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${generatePhoneSlug(phone.brand, phone.model)}`
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app"}/phones/${generatePhoneSlug(phone.brand, phone.model)}`
     },
     "aggregateRating": {
       "@type": "AggregateRating",

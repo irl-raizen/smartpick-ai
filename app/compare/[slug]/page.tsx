@@ -19,7 +19,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const phones = await getPhones();
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
   const canonicalUrl = `${baseUrl}/compare/${slug}`;
 
   let title = "Compare Smartphones";

@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { getPhones, generatePhoneSlug } from "@/src/lib/supabase";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
 
   // Static routes
   const routes = [

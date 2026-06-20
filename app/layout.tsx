@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app"),
   title: {
     default: "SmartPick AI - Find & Compare Smartphones",
     template: "%s | SmartPick AI"

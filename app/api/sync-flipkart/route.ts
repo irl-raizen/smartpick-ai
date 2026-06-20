@@ -376,8 +376,9 @@ async function triggerStockAlerts(
     }
 
     if (alerts && alerts.length > 0) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
-      const phoneUrl = `${siteUrl}/phones/${pId}`;
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
+      const slug = phoneName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const phoneUrl = `${siteUrl}/phones/${slug}`;
 
       for (const alert of alerts) {
         try {

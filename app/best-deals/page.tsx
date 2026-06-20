@@ -6,7 +6,7 @@ import type { Phone } from "@/src/types/phone";
 
 export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app";
 
 export const metadata: Metadata = {
   title: "Best Mobile Deals in India | SmartPick AI",
