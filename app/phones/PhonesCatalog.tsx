@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import type { Phone } from "@/src/types/phone";
+import { generatePhoneSlug } from "@/src/lib/supabase";
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -258,7 +259,7 @@ export function PhonesCatalog({ initialPhones }: PhonesCatalogProps) {
       ) : (
         <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filteredAndSortedPhones.map((phone) => (
-            <Link key={phone.id} href={`/phones/${phone.id}`} className="group block">
+            <Link key={phone.id} href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`} className="group block">
               <PhoneCard phone={phone} />
             </Link>
           ))}

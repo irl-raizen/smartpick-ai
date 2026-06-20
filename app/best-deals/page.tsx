@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { getPhones, supabase } from "@/src/lib/supabase";
+import { getPhones, supabase, generatePhoneSlug } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 
 export const revalidate = 1800; // ISR - Revalidate every 30 minutes
@@ -158,7 +158,7 @@ export default async function BestDealsPage() {
               "price": phone.price,
               "priceCurrency": "INR",
               "availability": phone.market_status === "ACTIVE" ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-              "url": `${baseUrl}/phones/${phone.id}`
+              "url": `${baseUrl}/phones/${generatePhoneSlug(phone.brand, phone.model)}`
             }
           }
         }))
@@ -223,7 +223,7 @@ export default async function BestDealsPage() {
               {biggestPriceDrops.map((drop) => (
                 <Link
                   key={drop.phone.id}
-                  href={`/phones/${drop.phone.id}`}
+                  href={`/phones/${generatePhoneSlug(drop.phone.brand, drop.phone.model)}`}
                   className="group relative rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-emerald-950/10"
                 >
                   <span className="absolute -top-3 -right-3 z-10 rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-zinc-950 shadow-md">
@@ -284,7 +284,7 @@ export default async function BestDealsPage() {
               {recentlyBackInStock.map((phone) => (
                 <Link
                   key={phone.id}
-                  href={`/phones/${phone.id}`}
+                  href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`}
                   className="group relative rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-violet-950/10"
                 >
                   <span className="absolute -top-3 -right-3 z-10 flex h-6 items-center justify-center rounded-full bg-indigo-500 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-md animate-pulse">
@@ -338,7 +338,7 @@ export default async function BestDealsPage() {
             {lowestPricesToday.map((phone) => (
               <Link
                 key={phone.id}
-                href={`/phones/${phone.id}`}
+                href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`}
                 className="group rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-violet-950/10"
               >
                 <div className="mb-4">
@@ -395,7 +395,7 @@ export default async function BestDealsPage() {
                 {under20k.map((phone) => (
                   <Link
                     key={phone.id}
-                    href={`/phones/${phone.id}`}
+                    href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`}
                     className="group rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-violet-950/10"
                   >
                     <div className="mb-4">
@@ -441,7 +441,7 @@ export default async function BestDealsPage() {
                 {under30k.map((phone) => (
                   <Link
                     key={phone.id}
-                    href={`/phones/${phone.id}`}
+                    href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`}
                     className="group rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-violet-950/10"
                   >
                     <div className="mb-4">
@@ -487,7 +487,7 @@ export default async function BestDealsPage() {
                 {under50k.map((phone) => (
                   <Link
                     key={phone.id}
-                    href={`/phones/${phone.id}`}
+                    href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`}
                     className="group rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-xl hover:shadow-violet-950/10"
                   >
                     <div className="mb-4">

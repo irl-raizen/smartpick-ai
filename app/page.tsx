@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 
 import { RecommendationCard } from "@/src/components/RecommendationCard";
 import { getRecommendations } from "@/src/lib/recommendations";
-import { getPhones } from "@/src/lib/supabase";
+import { getPhones, generatePhoneSlug } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 import type { RecommendedPhone } from "@/src/types/recommendation";
 
@@ -422,11 +423,12 @@ export default function Home() {
 
                 <div className="grid gap-6">
                   {recommendations.map((phone, index) => (
-                    <RecommendationCard
-                      key={phone.id}
-                      phone={phone}
-                      rank={index + 1}
-                    />
+                    <Link key={phone.id} href={`/phones/${generatePhoneSlug(phone.brand, phone.model)}`} className="block">
+                      <RecommendationCard
+                        phone={phone}
+                        rank={index + 1}
+                      />
+                    </Link>
                   ))}
                 </div>
               </div>

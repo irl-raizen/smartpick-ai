@@ -105,3 +105,35 @@ export async function getPhoneById(id: string): Promise<Phone | null> {
   return data;
 }
 
+export function generatePhoneSlug(brand: string, model: string): string {
+  return `${brand}-${model}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+export async function getPhoneByIdOrSlug(idOrSlug: string): Promise<Phone | null> {
+  const isNumeric = /^\d+$/.test(idOrSlug);
+  if (isNumeric) {
+    try {
+      const phone = await getPhoneById(idOrSlug);
+      if (phone) return phone;
+    } catch (e) {
+      console.warn(`getPhoneById failed for numeric ID ${idOrSlug}:`, e);
+    }
+  }
+
+  // Fallback or slug resolution: fetch all phones and match slug
+  try {
+    const phones = await getPhones();
+    const phone = phones.find(
+      (p) => generatePhoneSlug(p.brand, p.model) === idOrSlug
+    );
+    return phone || null;
+  } catch (e) {
+    console.error("Failed resolving phone by slug:", e);
+    return null;
+  }
+}
+
+

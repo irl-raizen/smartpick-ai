@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { getPhoneById, getPhones } from "@/src/lib/supabase";
+import { getPhoneByIdOrSlug, getPhones, generatePhoneSlug } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 import { LivePrices } from "@/src/components/LivePrices";
 import { PriceTrendsAndAlerts } from "@/src/components/PriceTrendsAndAlerts";
+import { notFound } from "next/navigation";
 
 export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
@@ -14,7 +15,7 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
-  const phone = await getPhoneById(id);
+  const phone = await getPhoneByIdOrSlug(id);
 
   if (!phone) {
     return {
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
-  const canonicalUrl = `${baseUrl}/phones/${phone.id}`;
+  const canonicalUrl = `${baseUrl}/phones/${generatePhoneSlug(phone.brand, phone.model)}`;
   const imageUrl = phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined;
 
   const titleText = `${phone.brand} ${phone.model} Price in India (Live) | SmartPick AI`;
@@ -185,44 +186,17 @@ function ScoreBar({ label, score, colorClass }: { label: string; score: number; 
 
 export default async function PhoneDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const phone = await getPhoneById(id);
-
-  const reviewMarkdown = phone
-    ? (phone.ai_review && phone.ai_review.trim() !== ""
-      ? phone.ai_review
-      : generateFallbackReview(phone))
-    : "";
-
-  const { pros: reviewPros, cons: reviewCons, verdict: reviewVerdict } = phone
-    ? parseReview(reviewMarkdown)
-    : { pros: [], cons: [], verdict: "" };
+  const phone = await getPhoneByIdOrSlug(id);
 
   if (!phone) {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-rose-600/10 blur-3xl" />
-        </div>
-        <div className="relative text-center max-w-md p-8 rounded-3xl border border-rose-500/20 bg-zinc-900/80 shadow-2xl backdrop-blur-sm">
-          <div className="mb-6 inline-flex rounded-full border border-rose-500/20 bg-rose-500/10 px-4 py-1.5 text-sm text-rose-200">
-            Error 404
-          </div>
-          <h1 className="text-2xl font-semibold text-white sm:text-3xl">Smartphone Not Found</h1>
-          <p className="mt-4 text-sm text-zinc-400">
-            The device you are looking for does not exist in our catalog or has been removed.
-          </p>
-          <div className="mt-8">
-            <Link
-              href="/phones"
-              className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-3 text-sm font-semibold text-white transition hover:from-violet-500 hover:to-fuchsia-500"
-            >
-              Back to Catalog
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+    notFound();
   }
+
+  const reviewMarkdown = phone.ai_review && phone.ai_review.trim() !== ""
+    ? phone.ai_review
+    : generateFallbackReview(phone);
+
+  const { pros: reviewPros, cons: reviewCons, verdict: reviewVerdict } = parseReview(reviewMarkdown);
 
   // Related phones engine
   const allPhones = await getPhones();
@@ -259,7 +233,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
         "@type": "Organization",
         "name": "Amazon"
       },
-      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${generatePhoneSlug(phone.brand, phone.model)}`
     },
     "aggregateRating": {
       "@type": "AggregateRating",
@@ -337,7 +311,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
             ← Back to Catalog
           </Link>
           <Link
-            href={`/compare?phone1=${phone.id}`}
+            href={`/compare/${generatePhoneSlug(phone.brand, phone.model)}`}
             className="inline-flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200 transition hover:border-violet-500/50 hover:bg-violet-500/20"
           >
             Compare this Phone
@@ -535,7 +509,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
             </h2>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {relatedPhones.map((related) => (
-                <Link key={related.id} href={`/phones/${related.id}`} className="group block">
+                <Link key={related.id} href={`/phones/${generatePhoneSlug(related.brand, related.model)}`} className="group block">
                   <article className="h-full rounded-2xl border border-zinc-900 bg-zinc-900/40 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-750 hover:bg-zinc-900/60 hover:shadow-xl hover:shadow-violet-950/10">
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
