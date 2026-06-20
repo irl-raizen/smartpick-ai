@@ -2,13 +2,23 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import type { Phone } from "@/src/types/phone";
 import { SearchableDropdown } from "@/src/components/SearchableDropdown";
 import { LivePrices } from "@/src/components/LivePrices";
 
 type CompareCatalogProps = {
   phones: Phone[];
+  initialPhone1Id?: string;
+  initialPhone2Id?: string;
 };
+
+function generatePhoneSlug(brand: string, model: string): string {
+  return `${brand}-${model}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -18,32 +28,40 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
-export function CompareCatalog({ phones }: CompareCatalogProps) {
+export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: CompareCatalogProps) {
   const searchParams = useSearchParams();
 
   // Selected phone IDs
-  const [phone1Id, setPhone1Id] = useState("");
-  const [phone2Id, setPhone2Id] = useState("");
+  const [phone1Id, setPhone1Id] = useState(initialPhone1Id || "");
+  const [phone2Id, setPhone2Id] = useState(initialPhone2Id || "");
 
   // Load from search params on mount
   useEffect(() => {
-    const p1 = searchParams.get("phone1");
-    const p2 = searchParams.get("phone2");
+    const p1 = searchParams.get("phone1") || initialPhone1Id;
+    const p2 = searchParams.get("phone2") || initialPhone2Id;
     if (p1 && phones.some((p) => String(p.id) === p1)) {
       setPhone1Id(p1);
     }
     if (p2 && phones.some((p) => String(p.id) === p2)) {
       setPhone2Id(p2);
     }
-  }, [searchParams, phones]);
+  }, [searchParams, phones, initialPhone1Id, initialPhone2Id]);
 
-  // Update URL search parameters
-  const updateParams = (p1: string, p2: string) => {
-    const params = new URLSearchParams();
-    if (p1) params.set("phone1", p1);
-    if (p2) params.set("phone2", p2);
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState(null, "", newUrl);
+  // Update URL to dynamic SEO slugs
+  const updateParams = (p1Id: string, p2Id: string) => {
+    const p1 = phones.find((p) => String(p.id) === p1Id);
+    const p2 = phones.find((p) => String(p.id) === p2Id);
+    
+    if (p1 && p2) {
+      const slug1 = generatePhoneSlug(p1.brand, p1.model);
+      const slug2 = generatePhoneSlug(p2.brand, p2.model);
+      window.history.pushState(null, "", `/compare/${slug1}-vs-${slug2}`);
+    } else if (p1) {
+      const slug1 = generatePhoneSlug(p1.brand, p1.model);
+      window.history.pushState(null, "", `/compare/${slug1}`);
+    } else {
+      window.history.pushState(null, "", `/compare`);
+    }
   };
 
   const handlePhone1Change = (id: string) => {
@@ -156,11 +174,12 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
 
                 {phone1.image_url && phone1.image_url.trim() !== "" && (
                   <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
-                    <img
+                    <Image
                       src={phone1.image_url}
                       alt={`${phone1.brand} ${phone1.model}`}
-                      loading="lazy"
-                      className="h-full w-auto object-contain transition duration-500 hover:scale-105"
+                      fill
+                      sizes="(max-width: 768px) 100vw, 300px"
+                      className="object-contain p-3 transition duration-500 hover:scale-105"
                     />
                   </div>
                 )}
@@ -222,11 +241,12 @@ export function CompareCatalog({ phones }: CompareCatalogProps) {
 
                 {phone2.image_url && phone2.image_url.trim() !== "" && (
                   <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
-                    <img
+                    <Image
                       src={phone2.image_url}
                       alt={`${phone2.brand} ${phone2.model}`}
-                      loading="lazy"
-                      className="h-full w-auto object-contain transition duration-500 hover:scale-105"
+                      fill
+                      sizes="(max-width: 768px) 100vw, 300px"
+                      className="object-contain p-3 transition duration-500 hover:scale-105"
                     />
                   </div>
                 )}

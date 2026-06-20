@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { supabase, getPhones } from "@/src/lib/supabase";
 import { CompareCatalog } from "./CompareCatalog";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
 interface PageProps {
   searchParams: Promise<{ phone1?: string; phone2?: string }>;

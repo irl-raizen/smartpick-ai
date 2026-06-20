@@ -19,7 +19,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const phones = await getPhones();
-    const phoneRoutes = phones.map((phone) => ({
+    const activePhones = phones.filter((phone) => phone.active !== false);
+    const phoneRoutes = activePhones.map((phone) => ({
       url: `${baseUrl}/phones/${phone.id}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,

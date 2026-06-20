@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { getPhoneById, getPhones } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 import { LivePrices } from "@/src/components/LivePrices";
 import { PriceTrendsAndAlerts } from "@/src/components/PriceTrendsAndAlerts";
+
+export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -24,13 +27,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const canonicalUrl = `${baseUrl}/phones/${phone.id}`;
   const imageUrl = phone.image_url && phone.image_url.trim() !== "" ? phone.image_url : undefined;
 
-  const formattedPrice = `₹${phone.price.toLocaleString("en-IN")}`;
-  const availabilityText = phone.market_status === "ACTIVE" ? "In Stock" : "Out of Stock";
-
-  // Build a concise description summarizing reviews and performance ratings
-  const ratingText = `SmartPick AI Performance: Camera ${phone.score_camera}/10, Gaming ${phone.score_gaming}/10, Battery ${phone.score_battery}/10.`;
-  const descText = `Get live prices starting at ${formattedPrice} (${availabilityText}), review ratings, chipset performance, and price history details for ${phone.brand} ${phone.model} in India. ${ratingText}`;
   const titleText = `${phone.brand} ${phone.model} Price in India (Live) | SmartPick AI`;
+  const descText = `Check live Amazon and Flipkart prices, availability, AI review, price history and price alerts for ${phone.brand} ${phone.model}.`;
 
   return {
     title: titleText,
@@ -239,15 +237,15 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
   const relatedPhones = [...sameBrand, ...differentBrand].slice(0, 3);
 
-  const descText = `Complete specifications, battery, camera, display, gaming performance and comparison for ${phone.brand} ${phone.model}.`;
   const ratingValue = ((phone.score_camera + phone.score_gaming + phone.score_battery) / 3).toFixed(1);
+  const pageDesc = `Check live Amazon and Flipkart prices, availability, AI review, price history and price alerts for ${phone.brand} ${phone.model}.`;
   
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     "name": `${phone.brand} ${phone.model}`,
     "image": phone.image_url && phone.image_url.trim() !== "" ? [phone.image_url] : [],
-    "description": descText,
+    "description": pageDesc,
     "brand": {
       "@type": "Brand",
       "name": phone.brand
@@ -257,11 +255,11 @@ export default async function PhoneDetailPage({ params }: PageProps) {
       "price": phone.price,
       "priceCurrency": "INR",
       "availability": phone.market_status === "ACTIVE" ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`,
       "seller": {
         "@type": "Organization",
-        "name": "SmartPick AI"
-      }
+        "name": "Amazon"
+      },
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app"}/phones/${phone.id}`
     },
     "aggregateRating": {
       "@type": "AggregateRating",
@@ -269,6 +267,14 @@ export default async function PhoneDetailPage({ params }: PageProps) {
       "bestRating": "10",
       "worstRating": "1",
       "ratingCount": 15
+    },
+    "review": {
+      "@type": "Review",
+      "author": {
+        "@type": "Person",
+        "name": "SmartPick AI Expert"
+      },
+      "reviewBody": reviewVerdict || `The ${phone.brand} ${phone.model} is a high-value phone with a solid total performance score.`
     }
   };
 
@@ -363,11 +369,12 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
             {phone.image_url && phone.image_url.trim() !== "" && (
               <div className="relative w-full h-52 my-6 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-4 flex items-center justify-center">
-                <img
+                <Image
                   src={phone.image_url}
                   alt={`${phone.brand} ${phone.model}`}
-                  loading="lazy"
-                  className="h-full w-auto object-contain transition duration-500 hover:scale-105"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 500px"
+                  className="object-contain p-4 transition duration-500 hover:scale-105"
                 />
               </div>
             )}
@@ -546,11 +553,12 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
                     {related.image_url && related.image_url.trim() !== "" && (
                       <div className="relative w-full h-32 mb-4 rounded-xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-2 flex items-center justify-center">
-                        <img
+                        <Image
                           src={related.image_url}
                           alt={`${related.brand} ${related.model}`}
-                          loading="lazy"
-                          className="h-full w-auto object-contain transition duration-300 group-hover:scale-105"
+                          fill
+                          sizes="(max-width: 768px) 100vw, 300px"
+                          className="object-contain p-2 transition duration-300 group-hover:scale-105"
                         />
                       </div>
                     )}

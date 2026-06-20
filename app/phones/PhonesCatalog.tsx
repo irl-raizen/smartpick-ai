@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import type { Phone } from "@/src/types/phone";
 
 function formatPrice(price: number) {
@@ -30,12 +31,13 @@ function PhoneCard({ phone }: { phone: Phone }) {
       </div>
 
       {phone.image_url && phone.image_url.trim() !== "" && (
-        <div className="relative w-full h-40 mb-4 rounded-xl overflow-hidden bg-zinc-950/40 border border-zinc-800/80 p-2 flex items-center justify-center">
-          <img
+        <div className="relative w-full h-40 mb-4 rounded-xl overflow-hidden bg-zinc-950/40 border border-zinc-800/80 p-2">
+          <Image
             src={phone.image_url}
             alt={`${phone.brand} ${phone.model}`}
-            loading="lazy"
-            className="h-full w-auto object-contain transition duration-300 group-hover:scale-105"
+            fill
+            sizes="(max-width: 768px) 100vw, 300px"
+            className="object-contain p-2 transition duration-300 group-hover:scale-105"
           />
         </div>
       )}
