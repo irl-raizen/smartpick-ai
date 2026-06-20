@@ -372,6 +372,66 @@ async function checkAndTriggerPriceAlerts(phoneId: number | string, newPrice: nu
   }
 }
 
+async function triggerStockAlerts(
+  phoneId: number | string, 
+  phoneName: string, 
+  amazonPrice: number, 
+  flipkartPrice: number
+) {
+  try {
+    const pId = typeof phoneId === "string" ? parseInt(phoneId, 10) : phoneId;
+    if (isNaN(pId)) return;
+
+    // Find all stock_alerts where notified=false
+    const { data: alerts, error: alertsErr } = await (supabase.from("stock_alerts") as any)
+      .select("id, email")
+      .eq("phone_id", pId)
+      .eq("notified", false);
+
+    if (alertsErr) {
+      console.error("Failed to query stock alerts:", alertsErr);
+      return;
+    }
+
+    if (alerts && alerts.length > 0) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
+      const phoneUrl = `${siteUrl}/phones/${pId}`;
+
+      const amazonPriceStr = amazonPrice > 0 ? `₹${amazonPrice.toLocaleString("en-IN")}` : "Unavailable";
+      const flipkartPriceStr = flipkartPrice > 0 ? `₹${flipkartPrice.toLocaleString("en-IN")}` : "Unavailable";
+
+      for (const alert of alerts) {
+        console.log(`\n==================================================`);
+        console.log(`🔥 STOCK ALERT EMAIL SENT:`);
+        console.log(`   Subject    : 🔥 ${phoneName} is back in stock!`);
+        console.log(`   To         : ${alert.email}`);
+        console.log(`   Body       :`);
+        console.log(`     Good news!`);
+        console.log(`     `);
+        console.log(`     ${phoneName} is now available again on SmartPick AI.`);
+        console.log(`     `);
+        console.log(`     Current prices:`);
+        console.log(`     Amazon: ${amazonPriceStr}`);
+        console.log(`     Flipkart: ${flipkartPriceStr}`);
+        console.log(`     `);
+        console.log(`     View Phone →`);
+        console.log(`     ${phoneUrl}`);
+        console.log(`==================================================\n`);
+
+        // Update notified = true, notified_at = NOW()
+        await (supabase.from("stock_alerts") as any)
+          .update({
+            notified: true,
+            notified_at: new Date().toISOString()
+          })
+          .eq("id", alert.id);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to trigger stock alerts:", error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     // 0. Rate Limiting Check (30 requests / minute / IP)
@@ -468,6 +528,30 @@ export async function POST(request: Request) {
           amazonScrapeError,
           amazonAvailDetails.message
         );
+
+        // Retrieve the updated phone status to check for transition from OUT_OF_STOCK -> ACTIVE
+        try {
+          const { data: updatedPhone } = await (supabase.from("phones") as any)
+            .select("market_status, brand, model, amazon_price, flipkart_price")
+            .eq("id", phone.id)
+            .maybeSingle();
+
+          if (updatedPhone) {
+            const oldStatus = phone.market_status;
+            const newStatus = updatedPhone.market_status;
+
+            if (oldStatus === "OUT_OF_STOCK" && newStatus === "ACTIVE") {
+              await triggerStockAlerts(
+                phone.id,
+                `${updatedPhone.brand} ${updatedPhone.model}`,
+                updatedPhone.amazon_price || 0,
+                updatedPhone.flipkart_price || 0
+              );
+            }
+          }
+        } catch (statusErr) {
+          console.error("Failed to check status transitions for stock alerts:", statusErr);
+        }
 
         return {
           id: phone.id,

@@ -330,6 +330,8 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
             <LivePrices
               query={`${phone.brand} ${phone.model}`}
+              phoneId={phone.id}
+              marketStatus={phone.market_status}
               amazonLink={phone.amazon_link}
               flipkartLink={phone.flipkart_link}
             />

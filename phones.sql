@@ -326,3 +326,18 @@ An absolute steal for mid-range gaming and speed, outperforming everything in it
 ### Verdict
 The ideal phone for photo purists and clean software lovers wanting long-term support.');
 
+-- Create stock_alerts table for back-in-stock notifications
+CREATE TABLE IF NOT EXISTS stock_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone_id BIGINT REFERENCES phones(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  notified BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  notified_at TIMESTAMP NULL
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_stock_alerts_phone_id ON stock_alerts(phone_id);
+CREATE INDEX IF NOT EXISTS idx_stock_alerts_email ON stock_alerts(email);
+CREATE INDEX IF NOT EXISTS idx_stock_alerts_notified ON stock_alerts(notified);
+
