@@ -333,11 +333,15 @@ CREATE TABLE IF NOT EXISTS stock_alerts (
   email TEXT NOT NULL,
   notified BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW(),
-  notified_at TIMESTAMP NULL
+  notified_at TIMESTAMP NULL,
+  email_status TEXT DEFAULT 'pending',
+  email_error TEXT,
+  retry_count INTEGER DEFAULT 0
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_phone_id ON stock_alerts(phone_id);
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_email ON stock_alerts(email);
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_notified ON stock_alerts(notified);
+CREATE INDEX IF NOT EXISTS idx_stock_alerts_email_status ON stock_alerts(email_status);
 

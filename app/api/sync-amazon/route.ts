@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase, getPhones } from "@/src/lib/supabase";
+import { sendBackInStockEmail } from "@/lib/email";
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -384,7 +385,7 @@ async function triggerStockAlerts(
 
     // Find all stock_alerts where notified=false
     const { data: alerts, error: alertsErr } = await (supabase.from("stock_alerts") as any)
-      .select("id, email")
+      .select("id, email, retry_count")
       .eq("phone_id", pId)
       .eq("notified", false);
 
@@ -397,34 +398,51 @@ async function triggerStockAlerts(
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://smartpick-ai.vercel.app";
       const phoneUrl = `${siteUrl}/phones/${pId}`;
 
-      const amazonPriceStr = amazonPrice > 0 ? `₹${amazonPrice.toLocaleString("en-IN")}` : "Unavailable";
-      const flipkartPriceStr = flipkartPrice > 0 ? `₹${flipkartPrice.toLocaleString("en-IN")}` : "Unavailable";
-
       for (const alert of alerts) {
-        console.log(`\n==================================================`);
-        console.log(`🔥 STOCK ALERT EMAIL SENT:`);
-        console.log(`   Subject    : 🔥 ${phoneName} is back in stock!`);
-        console.log(`   To         : ${alert.email}`);
-        console.log(`   Body       :`);
-        console.log(`     Good news!`);
-        console.log(`     `);
-        console.log(`     ${phoneName} is now available again on SmartPick AI.`);
-        console.log(`     `);
-        console.log(`     Current prices:`);
-        console.log(`     Amazon: ${amazonPriceStr}`);
-        console.log(`     Flipkart: ${flipkartPriceStr}`);
-        console.log(`     `);
-        console.log(`     View Phone →`);
-        console.log(`     ${phoneUrl}`);
-        console.log(`==================================================\n`);
+        try {
+          await sendBackInStockEmail(
+            alert.email,
+            phoneName,
+            amazonPrice,
+            flipkartPrice,
+            phoneUrl
+          );
 
-        // Update notified = true, notified_at = NOW()
-        await (supabase.from("stock_alerts") as any)
-          .update({
-            notified: true,
-            notified_at: new Date().toISOString()
-          })
-          .eq("id", alert.id);
+          // Update stock_alerts for success
+          const { error: updateErr } = await (supabase.from("stock_alerts") as any)
+            .update({
+              notified: true,
+              notified_at: new Date().toISOString(),
+              email_status: "sent",
+              email_error: null
+            })
+            .eq("id", alert.id);
+
+          if (updateErr) {
+            console.error(`Failed to update stock alert status after sending email to ${alert.email}:`, updateErr);
+          } else {
+            console.log(`Successfully sent stock alert email to ${alert.email} and updated DB.`);
+          }
+
+        } catch (emailErr) {
+          const errMsg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+          console.error(`Failed to send stock alert email to ${alert.email}:`, errMsg);
+
+          // Update stock_alerts for failure (retry logic)
+          const currentRetryCount = alert.retry_count || 0;
+          const { error: updateErr } = await (supabase.from("stock_alerts") as any)
+            .update({
+              notified: false,
+              email_status: "failed",
+              email_error: errMsg,
+              retry_count: currentRetryCount + 1
+            })
+            .eq("id", alert.id);
+
+          if (updateErr) {
+            console.error(`Failed to update failure status in DB for alert ${alert.id}:`, updateErr);
+          }
+        }
       }
     }
   } catch (error) {
@@ -540,7 +558,8 @@ export async function POST(request: Request) {
             const oldStatus = phone.market_status;
             const newStatus = updatedPhone.market_status;
 
-            if (oldStatus === "OUT_OF_STOCK" && newStatus === "ACTIVE") {
+            // Trigger stock alerts if the phone is ACTIVE (transitions and retries)
+            if (newStatus === "ACTIVE") {
               await triggerStockAlerts(
                 phone.id,
                 `${updatedPhone.brand} ${updatedPhone.model}`,
