@@ -19,12 +19,19 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import type { Phone } from "@/src/types/phone";
 
-interface PhoneHeroSectionProps {
-  phone: Phone;
-  formatPrice: (price: number) => string;
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(price);
 }
 
-export function PhoneHeroSection({ phone, formatPrice }: PhoneHeroSectionProps) {
+interface PhoneHeroSectionProps {
+  phone: Phone;
+}
+
+export function PhoneHeroSection({ phone }: PhoneHeroSectionProps) {
   const [selectedColor, setSelectedColor] = useState<string>("default");
   const [isWishlisted, setIsWishlisted] = useState<boolean>(false);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);

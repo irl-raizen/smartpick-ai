@@ -389,7 +389,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
           <div className="grid gap-10 lg:grid-cols-12">
             {/* LEFT COLUMN (Sticky on Desktop) - 35% equivalent (col-span-4) */}
             <div className="lg:col-span-4 lg:sticky lg:top-8 h-fit space-y-8">
-              <PhoneHeroSection phone={phone} formatPrice={formatPrice} />
+              <PhoneHeroSection phone={phone} />
             </div>
 
             {/* RIGHT COLUMN - 65% equivalent (col-span-8) */}
@@ -427,15 +427,11 @@ export default async function PhoneDetailPage({ params }: PageProps) {
               {/* Similar Phones Alternatives */}
               <SimilarPhonesList
                 phones={relatedPhones}
-                formatPrice={formatPrice}
-                generatePhoneSlug={generatePhoneSlug}
               />
 
               {/* Recently Viewed Session Tracker */}
               <RecentlyViewed
                 currentPhone={phone}
-                formatPrice={formatPrice}
-                generatePhoneSlug={generatePhoneSlug}
               />
             </div>
           </div>

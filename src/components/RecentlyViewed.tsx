@@ -7,13 +7,26 @@ import { Clock, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Phone } from "@/src/types/phone";
 
-interface RecentlyViewedProps {
-  currentPhone: Phone;
-  formatPrice: (price: number) => string;
-  generatePhoneSlug: (brand: string, model: string) => string;
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(price);
 }
 
-export function RecentlyViewed({ currentPhone, formatPrice, generatePhoneSlug }: RecentlyViewedProps) {
+function generatePhoneSlug(brand: string, model: string): string {
+  return `${brand}-${model}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+interface RecentlyViewedProps {
+  currentPhone: Phone;
+}
+
+export function RecentlyViewed({ currentPhone }: RecentlyViewedProps) {
   const [list, setList] = useState<Phone[]>([]);
 
   useEffect(() => {

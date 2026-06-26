@@ -6,13 +6,26 @@ import { Star, ArrowRight, Layers } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Phone } from "@/src/types/phone";
 
-interface SimilarPhonesListProps {
-  phones: Phone[];
-  formatPrice: (price: number) => string;
-  generatePhoneSlug: (brand: string, model: string) => string;
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(price);
 }
 
-export function SimilarPhonesList({ phones, formatPrice, generatePhoneSlug }: SimilarPhonesListProps) {
+function generatePhoneSlug(brand: string, model: string): string {
+  return `${brand}-${model}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+interface SimilarPhonesListProps {
+  phones: Phone[];
+}
+
+export function SimilarPhonesList({ phones }: SimilarPhonesListProps) {
   if (phones.length === 0) return null;
 
   return (
