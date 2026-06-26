@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-
 import type { Phone } from "@/src/types/phone";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,12 +22,45 @@ export const supabase = createClient<{
   };
 }>(supabaseUrl, supabaseAnonKey);
 
+let cachedSelectString: string | null = null;
+
+const allPossibleColumns = [
+  "id", "brand", "model", "price", "chipset", "battery", "camera", "display", 
+  "score_camera", "score_gaming", "score_battery", "image_url", "amazon_link", 
+  "flipkart_link", "ai_review", "amazon_price", "flipkart_price", "prices_last_scraped", 
+  "amazon_available", "flipkart_available", "active", "market_status", "slug", 
+  "thumbnail_url", "processor", "ram", "storage", "os", "rating", 
+  "image_source", "last_synced_at", "launch_year"
+];
+
+const fallbackColumns = [
+  "id", "brand", "model", "price", "chipset", "battery", "camera", "display", 
+  "score_camera", "score_gaming", "score_battery", "image_url", "amazon_link", 
+  "flipkart_link", "active", "market_status"
+];
+
+export async function getSelectString(): Promise<string> {
+  if (cachedSelectString) return cachedSelectString;
+  try {
+    const { data, error } = await supabase.from("phones").select("*").limit(1);
+    if (!error && data && data.length > 0) {
+      const keys = Object.keys(data[0]);
+      const validKeys = keys.filter(key => allPossibleColumns.includes(key));
+      cachedSelectString = validKeys.join(", ");
+      return cachedSelectString;
+    }
+  } catch (e) {
+    console.warn("Failed to dynamically inspect phones table schema, falling back.", e);
+  }
+  cachedSelectString = fallbackColumns.join(", ");
+  return cachedSelectString;
+}
+
 export async function getPhones(): Promise<Phone[]> {
+  const selectStr = await getSelectString();
   const { data, error } = await supabase
     .from("phones")
-    .select(
-      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available, active, market_status, slug, thumbnail_url, processor, ram, storage, os, rating, image_source, last_synced_at, launch_year",
-    )
+    .select(selectStr)
     .order("brand", { ascending: true })
     .order("model", { ascending: true });
 
@@ -37,27 +69,6 @@ export async function getPhones(): Promise<Phone[]> {
     if (error.code === "42P01" || (error.message && error.message.includes("relation") && error.message.includes("does not exist"))) {
       throw new Error("Table 'phones' does not exist in your Supabase database. Please open the Supabase SQL Editor and run the setup queries in phones.sql to create the table and seed the data.");
     }
-
-    // Fallback if DDL columns (image_url, amazon_link, flipkart_link) don't exist in Supabase yet (42703)
-    if (
-      error.code === "42703" ||
-      (error.message && (error.message.includes("column") || error.message.includes("does not exist")))
-    ) {
-      console.warn("DDL columns (image_url/amazon_link/flipkart_link) do not exist in Supabase yet. Falling back to basic columns.");
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from("phones")
-        .select(
-          "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery",
-        )
-        .order("brand", { ascending: true })
-        .order("model", { ascending: true });
-
-      if (fallbackError) {
-        throw new Error(fallbackError.message);
-      }
-      return fallbackData ?? [];
-    }
-
     throw new Error(error.message);
   }
 
@@ -65,11 +76,10 @@ export async function getPhones(): Promise<Phone[]> {
 }
 
 export async function getPhoneById(id: string): Promise<Phone | null> {
+  const selectStr = await getSelectString();
   const { data, error } = await supabase
     .from("phones")
-    .select(
-      "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available, active, market_status, slug, thumbnail_url, processor, ram, storage, os, rating, image_source, last_synced_at, launch_year",
-    )
+    .select(selectStr)
     .eq("id", id)
     .maybeSingle();
 
@@ -78,27 +88,6 @@ export async function getPhoneById(id: string): Promise<Phone | null> {
     if (error.code === "42P01" || (error.message && error.message.includes("relation") && error.message.includes("does not exist"))) {
       throw new Error("Table 'phones' does not exist in your Supabase database. Please open the Supabase SQL Editor and run the setup queries in phones.sql to create the table and seed the data.");
     }
-
-    // Fallback if DDL columns don't exist
-    if (
-      error.code === "42703" ||
-      (error.message && (error.message.includes("column") || error.message.includes("does not exist")))
-    ) {
-      console.warn("DDL columns (image_url/amazon_link/flipkart_link) do not exist in Supabase yet. Falling back to basic columns.");
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from("phones")
-        .select(
-          "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery",
-        )
-        .eq("id", id)
-        .maybeSingle();
-
-      if (fallbackError) {
-        throw new Error(fallbackError.message);
-      }
-      return fallbackData;
-    }
-
     throw new Error(error.message);
   }
 
@@ -123,19 +112,20 @@ export async function getPhoneByIdOrSlug(idOrSlug: string): Promise<Phone | null
     }
   }
 
-  // First try direct slug query from DB
-  try {
-    const { data, error } = await supabase
-      .from("phones")
-      .select(
-        "id, brand, model, price, chipset, battery, camera, display, score_camera, score_gaming, score_battery, image_url, amazon_link, flipkart_link, ai_review, amazon_price, flipkart_price, prices_last_scraped, amazon_available, flipkart_available, active, market_status, slug, thumbnail_url, processor, ram, storage, os, rating, image_source, last_synced_at, launch_year"
-      )
-      .eq("slug", idOrSlug)
-      .maybeSingle();
-    
-    if (!error && data) return data;
-  } catch (e) {
-    console.warn(`Direct slug lookup failed for ${idOrSlug}:`, e);
+  // First try direct slug query from DB if supported
+  const selectStr = await getSelectString();
+  if (selectStr.includes("slug")) {
+    try {
+      const { data, error } = await supabase
+        .from("phones")
+        .select(selectStr)
+        .eq("slug", idOrSlug)
+        .maybeSingle();
+      
+      if (!error && data) return data;
+    } catch (e) {
+      console.warn(`Direct slug lookup failed for ${idOrSlug}:`, e);
+    }
   }
 
   // Fallback or slug resolution: fetch all phones and match slug (handles legacy generated slugs)
