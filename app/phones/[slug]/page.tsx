@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { getPhoneByIdOrSlug, getPhones, generatePhoneSlug, supabase } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
-import { LivePrices } from "@/src/components/LivePrices";
 import { PriceTrendsAndAlerts } from "@/src/components/PriceTrendsAndAlerts";
 import { notFound, redirect } from "next/navigation";
+
+// Redesigned premium components
+import { PhoneHeroSection } from "@/src/components/PhoneHeroSection";
+import { PerformanceCard } from "@/src/components/PerformanceCard";
+import { AiReviewCard } from "@/src/components/AiReviewCard";
+import { DetailedSpecs } from "@/src/components/DetailedSpecs";
+import { SimilarPhonesList } from "@/src/components/SimilarPhonesList";
+import { VideoReviews } from "@/src/components/VideoReviews";
+import { RecentlyViewed } from "@/src/components/RecentlyViewed";
 
 export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
@@ -186,23 +193,6 @@ function formatRelativeTime(dateString: string | null | undefined): string {
   }
 }
 
-function ScoreBar({ label, score, colorClass }: { label: string; score: number; colorClass: string }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-sm">
-        <span className="text-zinc-400 font-medium">{label}</span>
-        <span className={`font-semibold ${colorClass}`}>{score} / 10</span>
-      </div>
-      <div className="h-3 w-full rounded-full bg-zinc-900 overflow-hidden ring-1 ring-zinc-800/50">
-        <div
-          className={`h-full rounded-full bg-gradient-to-r ${colorClass}`}
-          style={{ width: `${score * 10}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default async function PhoneDetailPage({ params }: PageProps) {
   const { slug } = await params;
 
@@ -237,7 +227,6 @@ export default async function PhoneDetailPage({ params }: PageProps) {
   } catch (e) {
     console.warn("Analytics log error:", e);
   }
-
 
   const reviewMarkdown = phone.ai_review && phone.ai_review.trim() !== ""
     ? phone.ai_review
@@ -369,275 +358,89 @@ export default async function PhoneDetailPage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="min-h-screen bg-zinc-955 text-zinc-100 relative">
 
-      {/* Background Orbs */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-violet-600/15 blur-3xl" />
-        <div className="absolute top-1/3 left-10 h-96 w-96 rounded-full bg-fuchsia-600/5 blur-3xl" />
-        <div className="absolute bottom-10 right-10 h-96 w-96 rounded-full bg-indigo-600/5 blur-3xl" />
-      </div>
+        {/* Background Orbs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-violet-600/10 blur-3xl" />
+          <div className="absolute top-1/3 left-10 h-96 w-96 rounded-full bg-fuchsia-600/5 blur-3xl" />
+          <div className="absolute bottom-10 right-10 h-96 w-96 rounded-full bg-indigo-600/5 blur-3xl" />
+        </div>
 
-      <main className="relative mx-auto max-w-5xl px-4 pb-20 pt-10 sm:px-6 lg:px-8">
-        {/* Navigation Breadcrumb */}
-        <nav className="mb-8 flex items-center justify-between">
-          <Link
-            href="/phones"
-            className="inline-flex items-center gap-2 text-sm text-zinc-400 transition hover:text-violet-300"
-          >
-            ← Back to Catalog
-          </Link>
-          <Link
-            href={`/compare/${generatePhoneSlug(phone.brand, phone.model)}`}
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200 transition hover:border-violet-500/50 hover:bg-violet-500/20"
-          >
-            Compare this Phone
-          </Link>
-        </nav>
+        <main className="relative mx-auto max-w-[1400px] px-4 pb-20 pt-10 sm:px-6 lg:px-8">
+          {/* Navigation Breadcrumb */}
+          <nav className="mb-8 flex items-center justify-between border-b border-zinc-900 pb-4">
+            <Link
+              href="/phones"
+              className="inline-flex items-center gap-2 text-sm text-zinc-400 transition hover:text-violet-300"
+            >
+              ← Back to Catalog
+            </Link>
+            <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500">
+              <span>Phones</span>
+              <span>/</span>
+              <span>{phone.brand}</span>
+              <span>/</span>
+              <span className="text-zinc-300">{phone.model}</span>
+            </div>
+          </nav>
 
-        {/* Main Details Card */}
-        <section className="grid gap-8 lg:grid-cols-12">
-          {/* Left Hero Card (Brand, Model, Price) */}
-          <div className="lg:col-span-5 rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm flex flex-col justify-between shadow-2xl relative overflow-hidden">
-            <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-violet-600/10 blur-2xl" />
-            <div>
-              <span className="text-xs font-bold uppercase tracking-widest text-violet-400">
-                {phone.brand}
-              </span>
-              <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl flex flex-wrap items-center gap-3">
-                <span>{phone.model}</span>
-                {phone.active === false && (
-                  <span className="rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-0.5 text-xs font-bold text-rose-300 uppercase tracking-wider">
-                    Out of Stock
-                  </span>
-                )}
-              </h1>
-              <p className="mt-4 text-4xl font-extrabold text-white tracking-tight">
-                {formatPrice(phone.price)}
-              </p>
-              <p className="text-xs text-zinc-500 mt-1">MRP (Incl. of all taxes) in India</p>
-              {phone.last_synced_at && (
-                <p className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1.5 justify-center sm:justify-start">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Last updated {formatRelativeTime(phone.last_synced_at)}
-                </p>
-              )}
+          {/* 2-Column Responsive Layout */}
+          <div className="grid gap-10 lg:grid-cols-12">
+            {/* LEFT COLUMN (Sticky on Desktop) - 35% equivalent (col-span-4) */}
+            <div className="lg:col-span-4 lg:sticky lg:top-8 h-fit space-y-8">
+              <PhoneHeroSection phone={phone} formatPrice={formatPrice} />
             </div>
 
-            {phone.image_url && phone.image_url.trim() !== "" && (
-              <div className="relative w-full h-52 my-6 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-4 flex items-center justify-center">
-                <Image
-                  src={phone.image_url}
-                  alt={`${phone.brand} ${phone.model}`}
-                  fill
-                  sizes="(max-width: 768px) 100vw, 500px"
-                  className="object-contain p-4 transition duration-500 hover:scale-105"
+            {/* RIGHT COLUMN - 65% equivalent (col-span-8) */}
+            <div className="lg:col-span-8 space-y-8">
+              {/* Price History Card */}
+              <div className="rounded-3xl border border-zinc-900 bg-zinc-900/20 p-6 sm:p-8 backdrop-blur-sm shadow-2xl">
+                <PriceTrendsAndAlerts
+                  phoneId={phone.id}
+                  currentPrice={phone.price}
+                  model={phone.model}
                 />
               </div>
-            )}
 
-            <div className="space-y-4">
-              <div className="rounded-2xl bg-zinc-950/60 p-4 border border-zinc-900/60">
-                <span className="text-xs text-zinc-500 uppercase tracking-wider block">Chipset</span>
-                <span className="mt-1 font-semibold text-zinc-200 block">{phone.chipset}</span>
-              </div>
-              <div className="rounded-2xl bg-zinc-950/60 p-4 border border-zinc-900/60">
-                <span className="text-xs text-zinc-550 uppercase tracking-wider block">Battery</span>
-                <span className="mt-1 font-semibold text-zinc-200 block">{phone.battery}</span>
-              </div>
-            </div>
+              {/* Performance Ratings */}
+              <PerformanceCard
+                scoreCamera={phone.score_camera}
+                scoreGaming={phone.score_gaming}
+                scoreBattery={phone.score_battery}
+                displaySpecs={phone.display}
+              />
 
-            <LivePrices
-              query={`${phone.brand} ${phone.model}`}
-              phoneId={phone.id}
-              marketStatus={phone.market_status}
-              amazonLink={phone.amazon_link}
-              flipkartLink={phone.flipkart_link}
-            />
-          </div>
+              {/* AI Review */}
+              <AiReviewCard
+                pros={reviewPros}
+                cons={reviewCons}
+                verdict={reviewVerdict}
+              />
 
-          {/* Right Detailed Specs & Scores Card */}
-          <div className="lg:col-span-7 space-y-8">
-            {/* Price Trends & Alerts Widget */}
-            <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm shadow-2xl">
-              <PriceTrendsAndAlerts
-                phoneId={phone.id}
-                currentPrice={phone.price}
-                model={phone.model}
+              {/* Full Specifications Grid */}
+              <DetailedSpecs phone={phone} formatPrice={formatPrice} />
+
+              {/* Video Reviews */}
+              <VideoReviews model={phone.model} brand={phone.brand} />
+
+              {/* Similar Phones Alternatives */}
+              <SimilarPhonesList
+                phones={relatedPhones}
+                formatPrice={formatPrice}
+                generatePhoneSlug={generatePhoneSlug}
+              />
+
+              {/* Recently Viewed Session Tracker */}
+              <RecentlyViewed
+                currentPhone={phone}
+                formatPrice={formatPrice}
+                generatePhoneSlug={generatePhoneSlug}
               />
             </div>
-
-            {/* Scores Widget */}
-            <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm space-y-6 shadow-2xl">
-              <h2 className="text-lg font-bold text-white tracking-wide border-b border-zinc-850 pb-3">
-                Performance Ratings
-              </h2>
-              <div className="space-y-5">
-                <ScoreBar label="Camera Performance" score={phone.score_camera} colorClass="from-violet-500 to-fuchsia-500 text-violet-300" />
-                <ScoreBar label="Gaming & Processing" score={phone.score_gaming} colorClass="from-emerald-500 to-cyan-500 text-emerald-300" />
-                <ScoreBar label="Battery Efficiency" score={phone.score_battery} colorClass="from-amber-500 to-orange-500 text-amber-300" />
-              </div>
-            </div>
-
-            {/* AI Review Widget */}
-            <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm space-y-6 shadow-2xl relative overflow-hidden animate-fadeIn">
-              <div className="absolute top-0 right-0 bg-violet-600/10 border-b border-l border-violet-500/20 text-violet-300 text-[10px] uppercase font-bold tracking-widest px-3 py-1.5 rounded-bl-xl shadow-md flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
-                AI Generated Review
-              </div>
-              
-              <h2 className="text-lg font-bold text-white tracking-wide border-b border-zinc-850 pb-3">
-                SmartPick AI Insights
-              </h2>
-
-              <div className="grid gap-6 md:grid-cols-2 mt-4">
-                {/* Pros List */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                    <svg className="h-4.5 w-4.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Pros
-                  </h3>
-                  <ul className="space-y-2 text-sm text-zinc-350">
-                    {reviewPros.map((pro, index) => (
-                      <li key={index} className="leading-relaxed flex items-start gap-2">
-                        <span className="text-emerald-500 mt-1 shrink-0">•</span>
-                        <span>{pro}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Cons List */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-rose-400 flex items-center gap-2">
-                    <svg className="h-4.5 w-4.5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Cons
-                  </h3>
-                  <ul className="space-y-2 text-sm text-zinc-350">
-                    {reviewCons.map((con, index) => (
-                      <li key={index} className="leading-relaxed flex items-start gap-2">
-                        <span className="text-rose-500 mt-1 shrink-0">•</span>
-                        <span>{con}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              {/* Verdict */}
-              {reviewVerdict && (
-                <div className="mt-6 pt-5 border-t border-zinc-850/60 space-y-2">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-violet-400">
-                    Verdict
-                  </h3>
-                  <p className="text-sm leading-relaxed text-zinc-200 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl italic">
-                    &quot;{reviewVerdict}&quot;
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Specifications Widget */}
-            <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-8 backdrop-blur-sm space-y-6 shadow-2xl">
-              <h2 className="text-lg font-bold text-white tracking-wide border-b border-zinc-850 pb-3">
-                Full Specifications
-              </h2>
-              <dl className="grid gap-y-4 text-sm">
-                <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                  <dt className="text-zinc-500 font-medium">Brand</dt>
-                  <dd className="col-span-2 text-zinc-250 font-semibold">{phone.brand}</dd>
-                </div>
-                <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                  <dt className="text-zinc-500 font-medium">Model</dt>
-                  <dd className="col-span-2 text-zinc-250 font-semibold">{phone.model}</dd>
-                </div>
-                <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                  <dt className="text-zinc-500 font-medium">Price</dt>
-                  <dd className="col-span-2 text-zinc-250 font-semibold">{formatPrice(phone.price)}</dd>
-                </div>
-                <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                  <dt className="text-zinc-500 font-medium">Processor</dt>
-                  <dd className="col-span-2 text-zinc-250 font-semibold">{phone.chipset}</dd>
-                </div>
-                <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                  <dt className="text-zinc-500 font-medium">Battery Capacity</dt>
-                  <dd className="col-span-2 text-zinc-250 font-semibold">{phone.battery}</dd>
-                </div>
-                {phone.camera && (
-                  <div className="grid grid-cols-3 py-2 border-b border-zinc-900">
-                    <dt className="text-zinc-500 font-medium">Rear Camera</dt>
-                    <dd className="col-span-2 text-zinc-250 font-semibold">{phone.camera}</dd>
-                  </div>
-                )}
-                {phone.display && (
-                  <div className="grid grid-cols-3 py-2">
-                    <dt className="text-zinc-500 font-medium">Display Specs</dt>
-                    <dd className="col-span-2 text-zinc-250 font-semibold">{phone.display}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
           </div>
-        </section>
-
-        {/* Related Phones Section */}
-        {relatedPhones.length > 0 && (
-          <section className="mt-16 space-y-6">
-            <h2 className="text-2xl font-bold text-white tracking-wide text-center sm:text-left">
-              Related Smartphones
-            </h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {relatedPhones.map((related) => (
-                <Link key={related.id} href={`/phones/${generatePhoneSlug(related.brand, related.model)}`} className="group block">
-                  <article className="h-full rounded-2xl border border-zinc-900 bg-zinc-900/40 p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-zinc-750 hover:bg-zinc-900/60 hover:shadow-xl hover:shadow-violet-950/10">
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-semibold uppercase tracking-wider text-violet-400">
-                          {related.brand}
-                        </span>
-                        <h3 className="mt-1 text-lg font-bold text-white group-hover:text-violet-200 transition-colors">
-                          {related.model}
-                        </h3>
-                      </div>
-                      <span className="rounded-full bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-350 border border-violet-500/20">
-                        {formatPrice(related.price)}
-                      </span>
-                    </div>
-
-                    {related.image_url && related.image_url.trim() !== "" && (
-                      <div className="relative w-full h-32 mb-4 rounded-xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-2 flex items-center justify-center">
-                        <Image
-                          src={related.image_url}
-                          alt={`${related.brand} ${related.model}`}
-                          fill
-                          sizes="(max-width: 768px) 100vw, 300px"
-                          className="object-contain p-2 transition duration-300 group-hover:scale-105"
-                        />
-                      </div>
-                    )}
-
-                    <dl className="space-y-2 text-xs border-t border-zinc-850 pt-3 text-zinc-400">
-                      <div className="flex justify-between">
-                        <span>Chipset</span>
-                        <span className="font-medium text-zinc-250">{related.chipset}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Battery</span>
-                        <span className="font-medium text-zinc-250">{related.battery}</span>
-                      </div>
-                    </dl>
-                  </article>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-      </main>
-    </div>
+        </main>
+      </div>
     </>
   );
 }
