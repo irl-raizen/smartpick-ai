@@ -208,6 +208,26 @@ export default function Home() {
       setNoMatches(results.length === 0);
       setSubmitted(true);
 
+      // Log recommendation query to analytics
+      fetch("/api/analytics", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventType: "recommendation",
+          eventData: {
+            budget,
+            priorities: {
+              camera: form.cameraImportance,
+              gaming: form.gamingImportance,
+              battery: form.batteryImportance,
+            },
+            resultsCount: results.length
+          }
+        })
+      }).catch((err) => console.warn("Failed to log recommendation event:", err));
+
       // 5. Send lead query event to n8n webhook if configured
       const n8nWebhookUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
       if (n8nWebhookUrl && n8nWebhookUrl.trim() !== "") {

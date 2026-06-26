@@ -26,8 +26,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   let description = "Compare specifications, performance ratings, and features of the latest smartphones side-by-side.";
 
   const parts = slug.split("-vs-");
-  const phone1 = phones.find(p => generatePhoneSlug(p.brand, p.model) === parts[0]);
-  const phone2 = parts[1] ? phones.find(p => generatePhoneSlug(p.brand, p.model) === parts[1]) : null;
+  const phone1 = phones.find(p => p.slug === parts[0] || generatePhoneSlug(p.brand, p.model) === parts[0]);
+  const phone2 = parts[1] ? phones.find(p => p.slug === parts[1] || generatePhoneSlug(p.brand, p.model) === parts[1]) : null;
 
   if (phone1 && phone2) {
     title = `${phone1.brand} ${phone1.model} vs ${phone2.brand} ${phone2.model} Comparison`;
@@ -64,8 +64,8 @@ export default async function CompareSlugPage({ params }: PageProps) {
   const phones = await getPhones();
 
   const parts = slug.split("-vs-");
-  const phone1 = phones.find(p => generatePhoneSlug(p.brand, p.model) === parts[0]);
-  const phone2 = parts[1] ? phones.find(p => generatePhoneSlug(p.brand, p.model) === parts[1]) : null;
+  const phone1 = phones.find(p => p.slug === parts[0] || generatePhoneSlug(p.brand, p.model) === parts[0]);
+  const phone2 = parts[1] ? phones.find(p => p.slug === parts[1] || generatePhoneSlug(p.brand, p.model) === parts[1]) : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">

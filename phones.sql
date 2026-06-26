@@ -62,7 +62,7 @@ The best option for iOS users prioritizing screen size and long-lasting battery 
 ### Verdict
 A solid, compact everyday device, though outclassed in technical specs by cheaper Android alternatives.'),
 
-('Samsung', 'Galaxy S24 Ultra', 129999, 'Snapdragon 8 Gen 3', '5000 mAh', '200MP Main + 50MP Telephoto + 12MP Ultra-Wide', '6.8 inch Dynamic AMOLED 2X, 120Hz', 10, 10, 9, 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=500', 'https://www.amazon.in/s?k=Samsung+Galaxy+S24+Ultra', 'https://www.flipkart.com/search?q=Samsung+Galaxy+S24+Ultra', '### Pros
+('Samsung', 'Galaxy S24 Ultra', 129999, 'Snapdragon 8 Gen 3', '5000 mAh', '200MP Main + 50MP Telephoto + 12MP Ultra-Wide', '6.8 inch Dynamic AMOLED 2X, 120Hz', 10, 10, 9, 'https://vlebazaar.in/image/cache/catalog/Samsung-Galaxy-S24-Ultra-5G-AI-Smartphone-Titanium-Gray-12GB-256GB-Stora/Samsung-Galaxy-S24-Ultra-5G-AI-Smartphone-Titanium-Gray-12GB-256GB-Storage-S928B-1500x1500.jpg', 'https://amzn.to/4xOZ4m3', 'https://www.flipkart.com/search?q=Samsung+Galaxy+S24+Ultra', '### Pros
 - Unmatched processing power with Snapdragon 8 Gen 3.
 - Bright 120Hz display with flat design and anti-reflective glass.
 - Extremely versatile quad-camera array with 200MP sensor and S-Pen utility.
@@ -344,4 +344,42 @@ CREATE INDEX IF NOT EXISTS idx_stock_alerts_phone_id ON stock_alerts(phone_id);
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_email ON stock_alerts(email);
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_notified ON stock_alerts(notified);
 CREATE INDEX IF NOT EXISTS idx_stock_alerts_email_status ON stock_alerts(email_status);
+
+-- Migration: Add missing specs and metadata columns to phones table
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS processor TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS ram TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS storage TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS os TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS rating NUMERIC;
+
+-- Add index on slug for fast lookups
+CREATE INDEX IF NOT EXISTS idx_phones_slug ON phones(slug);
+
+-- Migration: Add image source and last sync columns
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS image_source TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;
+
+-- Migration: Create sync_logs table for monitoring scraper activity
+CREATE TABLE IF NOT EXISTS sync_logs (
+  id BIGSERIAL PRIMARY KEY,
+  source TEXT NOT NULL,
+  status TEXT NOT NULL,
+  phones_processed INTEGER DEFAULT 0,
+  phones_inserted INTEGER DEFAULT 0,
+  phones_updated INTEGER DEFAULT 0,
+  phones_marked_inactive INTEGER DEFAULT 0,
+  images_updated INTEGER DEFAULT 0,
+  errors INTEGER DEFAULT 0,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  finished_at TIMESTAMPTZ,
+  duration_ms INTEGER,
+  error_message TEXT
+);
+
+-- Indexes for performance and sorting
+CREATE INDEX IF NOT EXISTS idx_sync_logs_source ON sync_logs(source);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_status ON sync_logs(status);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_started_at ON sync_logs(started_at DESC);
 

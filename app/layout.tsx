@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
-
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,16 +53,47 @@ export const metadata: Metadata = {
     google: "wtBknhQ0EFHv83LuvD9ImK3GV91viO2CLhxJuhSuvb4"
   }
 };
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const orgJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "SmartPick AI",
+    "url": "https://smartpickai.vercel.app",
+    "logo": "https://smartpickai.vercel.app/logo.png"
+  };
+
+  const webSiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "SmartPick AI",
+    "url": "https://smartpickai.vercel.app",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://smartpickai.vercel.app/phones?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  };
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-150">
         <header className="sticky top-0 z-50 w-full border-b border-zinc-900/60 bg-zinc-950/85 backdrop-blur-md">
           <div className="mx-auto flex max-w-6xl h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -79,12 +111,17 @@ export default function RootLayout({
               <Link href="/compare" className="text-sm font-semibold text-zinc-300 hover:text-violet-350 transition">
                 Compare
               </Link>
+              <Link href="/chat" className="text-sm font-semibold text-zinc-300 hover:text-violet-350 transition">
+                Chat
+              </Link>
             </nav>
           </div>
         </header>
         <div className="flex-1 flex flex-col">
           {children}
         </div>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

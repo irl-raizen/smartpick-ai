@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { supabase, getPhones } from "@/src/lib/supabase";
+import { supabase, getPhones, startSyncLog, finishSyncLog } from "@/src/lib/supabase";
 import { sendBackInStockEmail } from "@/lib/email";
+import * as cheerio from "cheerio";
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -63,6 +64,38 @@ async function scrapeFlipkartHtml(query: string): Promise<string | null> {
   } catch (e) {
     return null;
   }
+}
+
+function extractFlipkartProductImage(html: string | null): string | null {
+  if (!html) return null;
+  try {
+    const $ = cheerio.load(html);
+    
+    // 1. Direct page main image
+    const mainImg = $("._396cs4._3exPp9").attr("src") || $("._396cs4").attr("src") || $("img[src*='flixcart.com/image']").attr("src");
+    if (mainImg && mainImg.startsWith("http")) return mainImg;
+
+    // 2. Search results grid image
+    let searchImage: string | null = null;
+    $("img").each((_, img) => {
+      const src = $(img).attr("src") || $(img).attr("data-src");
+      if (src && src.startsWith("http") && src.includes("flixcart.com/image")) {
+        searchImage = src;
+        return false;
+      }
+    });
+    if (searchImage) return searchImage;
+
+    // 3. Regex fallback
+    const imgRegex = /https:\/\/rukminim[0-9]\.flixcart\.com\/image\/[a-zA-Z0-9%_/.-]+/gi;
+    const matches = html.match(imgRegex);
+    if (matches && matches.length > 0) {
+      return matches[0];
+    }
+  } catch (e) {
+    console.error("Failed to extract Flipkart product image:", e);
+  }
+  return null;
 }
 
 function extractPricesFromHtml(html: string, storeName: string): number[] {
@@ -433,6 +466,15 @@ async function triggerStockAlerts(
 }
 
 export async function POST(request: Request) {
+  let logId: string | number | null = null;
+  let phonesProcessed = 0;
+  let phonesInserted = 0;
+  let phonesUpdated = 0;
+  let phonesMarkedInactive = 0;
+  let imagesUpdated = 0;
+  let errorsCount = 0;
+  const results = [];
+
   try {
     // 0. Rate Limiting Check (30 requests / minute / IP)
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
@@ -457,22 +499,40 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Fetch all phones from Supabase
+    // 1. Fetch all phones from Supabase (slicing by limit if provided)
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : null;
+    const dryRun = searchParams.get("dryRun") === "true";
+
+    // Start logging sync job
+    logId = await startSyncLog(dryRun ? "flipkart (dry run)" : "flipkart");
+
     let phones;
     try {
       phones = await getPhones();
+      if (limit !== null && !isNaN(limit)) {
+        phones = phones.slice(0, limit);
+      }
     } catch (fetchError: any) {
+      errorsCount++;
+      if (logId) {
+        await finishSyncLog(logId, {
+          status: "failed",
+          error_message: fetchError.message || "Failed to fetch phones",
+          errors: errorsCount
+        });
+      }
       return NextResponse.json({ error: fetchError.message || "Failed to fetch phones" }, { status: 500 });
     }
 
-    const results = [];
-    
     // 2. Batch process (batch size = 3) to prevent rate limits
     const batchSize = 3;
     for (let i = 0; i < phones.length; i += batchSize) {
       const batch = phones.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (phone) => {
+        phonesProcessed++;
         const query = `${phone.brand} ${phone.model}`;
         
         let flipkartHtml = null;
@@ -480,13 +540,16 @@ export async function POST(request: Request) {
           flipkartHtml = await scrapeFlipkartHtml(query);
         } catch (e) {
           console.error(`Flipkart scrape error for ${query}:`, e);
+          errorsCount++;
         }
 
         const flipkartPrice = findBestPrice(flipkartHtml, phone.price, "Flipkart");
         const flipkartAvailable = !!flipkartPrice && checkAvailability(flipkartHtml);
+        const flipkartImage = extractFlipkartProductImage(flipkartHtml);
 
         const updatePayload: any = {
-          prices_last_scraped: new Date().toISOString()
+          prices_last_scraped: new Date().toISOString(),
+          last_synced_at: new Date().toISOString()
         };
 
         if (flipkartPrice) {
@@ -494,54 +557,102 @@ export async function POST(request: Request) {
           updatePayload.flipkart_available = flipkartAvailable;
         } else {
           updatePayload.flipkart_available = false;
+          errorsCount++; // Scrape fail / fallback
+        }
+
+        const hasNewImage = flipkartImage && (!phone.image_url || phone.image_url.trim() === "");
+        if (hasNewImage) {
+          updatePayload.image_url = flipkartImage;
+          updatePayload.thumbnail_url = flipkartImage;
+          updatePayload.image_source = "flipkart";
         }
 
         let dbSuccess = false;
-        try {
-          const { error: updateError } = await (supabase.from("phones") as any)
-            .update(updatePayload)
-            .eq("id", phone.id);
+        if (dryRun) {
+          dbSuccess = true;
+          phonesUpdated++;
+          if (hasNewImage) imagesUpdated++;
+        } else {
+          try {
+            const { error: updateError } = await (supabase.from("phones") as any)
+              .update(updatePayload)
+              .eq("id", phone.id);
 
-          if (!updateError) {
-            dbSuccess = true;
+            if (!updateError) {
+              dbSuccess = true;
+              phonesUpdated++;
+              if (hasNewImage) imagesUpdated++;
+            } else {
+              errorsCount++;
+              console.error("DB update error in Flipkart sync:", updateError);
+            }
+          } catch (dbErr) {
+            errorsCount++;
+            console.warn("DB update failed during sync.");
           }
-        } catch (dbErr) {
-          console.warn("DB update failed during sync.");
         }
 
         // Sync store-specific prices, history, and alerts to maintain database consistency
-        const finalFlipkartPrice = flipkartPrice ? Math.round(flipkartPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.97)) / 10) * 10;
+        const finalFlipkartPrice = flipkartPrice ? Math.round(flipkartPrice / 10) * 10 : Math.round((phone.price * (Math.random() * 0.03 + 0.98)) / 10) * 10;
         const flipkartAvailDetails = getAvailabilityDetails(flipkartHtml, !!flipkartPrice);
         const flipkartUrls = generateFlipkartAffiliateUrl(flipkartHtml, query, phone.flipkart_link);
         const flipkartScrapeStatus = flipkartPrice ? "success" : "failed";
         const flipkartScrapeError = flipkartPrice ? null : detectScrapeError(flipkartHtml);
 
-        await syncStoreData(
-          phone.id,
-          "Flipkart",
-          finalFlipkartPrice,
-          flipkartAvailDetails.available,
-          flipkartUrls.productUrl,
-          flipkartUrls.affiliateUrl,
-          flipkartPrice ? "scraped" : "fallback",
-          flipkartScrapeStatus,
-          flipkartScrapeError,
-          flipkartAvailDetails.message
-        );
+        if (!dryRun) {
+          await syncStoreData(
+            phone.id,
+            "Flipkart",
+            finalFlipkartPrice,
+            flipkartAvailDetails.available,
+            flipkartUrls.productUrl,
+            flipkartUrls.affiliateUrl,
+            flipkartPrice ? "scraped" : "fallback",
+            flipkartScrapeStatus,
+            flipkartScrapeError,
+            flipkartAvailDetails.message
+          );
+        }
+
+        // Recalculate phone active and market_status based on store_prices
+        let hasAvailableStore = flipkartAvailDetails.available;
+        if (!dryRun) {
+          try {
+            const { data: stores, error: storesErr } = await (supabase.from("store_prices") as any)
+              .select("available")
+              .eq("phone_id", phone.id);
+            
+            if (!storesErr && stores && stores.length > 0) {
+              hasAvailableStore = stores.some((s: any) => s.available === true);
+              const { error: phoneUpdateErr } = await (supabase.from("phones") as any)
+                .update({
+                  active: hasAvailableStore,
+                  market_status: hasAvailableStore ? "ACTIVE" : "OUT_OF_STOCK"
+                })
+                .eq("id", phone.id);
+              
+              if (phoneUpdateErr) {
+                console.error(`Failed to update phone active status for ID ${phone.id}:`, phoneUpdateErr);
+              }
+            }
+          } catch (dbErr) {
+            console.error("Failed to update phone status:", dbErr);
+          }
+        }
+
+        if (!hasAvailableStore) {
+          phonesMarkedInactive++;
+        }
 
         // Retrieve the updated phone status to check for transition from OUT_OF_STOCK -> ACTIVE
-        try {
-          const { data: updatedPhone } = await (supabase.from("phones") as any)
-            .select("market_status, brand, model, amazon_price, flipkart_price")
-            .eq("id", phone.id)
-            .maybeSingle();
+        if (!dryRun && hasAvailableStore) {
+          try {
+            const { data: updatedPhone } = await (supabase.from("phones") as any)
+              .select("market_status, brand, model, amazon_price, flipkart_price")
+              .eq("id", phone.id)
+              .maybeSingle();
 
-          if (updatedPhone) {
-            const oldStatus = phone.market_status;
-            const newStatus = updatedPhone.market_status;
-
-            // Trigger stock alerts if the phone is ACTIVE (transitions and retries)
-            if (newStatus === "ACTIVE") {
+            if (updatedPhone && updatedPhone.market_status === "ACTIVE") {
               await triggerStockAlerts(
                 phone.id,
                 `${updatedPhone.brand} ${updatedPhone.model}`,
@@ -549,9 +660,9 @@ export async function POST(request: Request) {
                 updatedPhone.flipkart_price || 0
               );
             }
+          } catch (statusErr) {
+            console.error("Failed to check status transitions for stock alerts:", statusErr);
           }
-        } catch (statusErr) {
-          console.error("Failed to check status transitions for stock alerts:", statusErr);
         }
 
         return {
@@ -574,13 +685,42 @@ export async function POST(request: Request) {
       }
     }
 
+    // Success sync log update
+    await finishSyncLog(logId, {
+      status: "success",
+      phones_processed: phonesProcessed,
+      phones_inserted: phonesInserted,
+      phones_updated: phonesUpdated,
+      phones_marked_inactive: phonesMarkedInactive,
+      images_updated: imagesUpdated,
+      errors: errorsCount
+    });
+
     return NextResponse.json({
-      message: "Flipkart sync completed successfully.",
+      message: dryRun ? "Flipkart dry run completed." : "Flipkart sync completed successfully.",
+      phonesProcessed,
+      phonesUpdated,
+      phonesMarkedInactive,
+      imagesUpdated,
+      errorsCount,
       syncedCount: results.length,
       phones: results
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Flipkart sync API route failed:", error);
+    if (logId) {
+      await finishSyncLog(logId, {
+        status: "failed",
+        error_message: error.message || String(error),
+        phones_processed: phonesProcessed,
+        phones_inserted: phonesInserted,
+        phones_updated: phonesUpdated,
+        phones_marked_inactive: phonesMarkedInactive,
+        images_updated: imagesUpdated,
+        errors: errorsCount + 1
+      });
+    }
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Internal Server Error"
     }, { status: 500 });

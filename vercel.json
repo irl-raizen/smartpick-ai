@@ -1,12 +1,20 @@
 {
   "crons": [
     {
-      "path": "/api/sync-amazon",
-      "schedule": "0 */6 * * *"
+      "path": "/api/sync-gsmarena",
+      "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/sync-flipkart",
-      "schedule": "0 */6 * * *"
+      "path": "/api/sync-amazon?limit=20",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/sync-flipkart?limit=20",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/sync-all",
+      "schedule": "0 3 * * *"
     }
   ]
 }

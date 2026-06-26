@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { supabase, getPhones } from "@/src/lib/supabase";
+import { supabase, getPhones, startSyncLog, finishSyncLog } from "@/src/lib/supabase";
 import { sendBackInStockEmail } from "@/lib/email";
+import * as cheerio from "cheerio";
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -90,6 +91,41 @@ async function scrapeAmazonHtml(query: string): Promise<string | null> {
     console.error(`Amazon scraping failed:`, e);
     return null;
   }
+}
+
+function extractAmazonProductImage(html: string | null): string | null {
+  if (!html) return null;
+  try {
+    const $ = cheerio.load(html);
+    
+    // 1. Direct page main image
+    const landingImage = $("#landingImage").attr("src") || $("#imgBlkFront").attr("src");
+    if (landingImage && landingImage.startsWith("http")) return landingImage;
+
+    // 2. Search results grid image
+    let searchImage: string | null = null;
+    $(".s-image").each((_, img) => {
+      const src = $(img).attr("src") || $(img).attr("data-src");
+      if (src && src.startsWith("http") && !src.includes("sprite") && !src.includes("pixel")) {
+        searchImage = src;
+        return false;
+      }
+    });
+    if (searchImage) return searchImage;
+
+    // 3. Regex fallback for Amazon image host patterns
+    const imgRegex = /https:\/\/(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images-eu\.ssl-images-amazon\.com)\/images\/I\/[a-zA-Z0-9%_.-]+\.(?:jpg|jpeg|png|gif)/gi;
+    const matches = html.match(imgRegex);
+    if (matches && matches.length > 0) {
+      const validMatches = matches.filter(m => !m.includes("sprite") && !m.includes("pixel") && !m.includes("icon"));
+      if (validMatches.length > 0) {
+        return validMatches[0];
+      }
+    }
+  } catch (e) {
+    console.error("Failed to extract Amazon product image:", e);
+  }
+  return null;
 }
 
 
@@ -452,6 +488,15 @@ async function triggerStockAlerts(
 }
 
 export async function POST(request: Request) {
+  let logId: string | number | null = null;
+  let phonesProcessed = 0;
+  let phonesInserted = 0;
+  let phonesUpdated = 0;
+  let phonesMarkedInactive = 0;
+  let imagesUpdated = 0;
+  let errorsCount = 0;
+  const results = [];
+
   try {
     // 0. Rate Limiting Check (30 requests / minute / IP)
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
@@ -476,22 +521,40 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Fetch all phones from Supabase
+    // 1. Fetch all phones from Supabase (slicing by limit if provided)
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : null;
+    const dryRun = searchParams.get("dryRun") === "true";
+
+    // Start logging sync job
+    logId = await startSyncLog(dryRun ? "amazon (dry run)" : "amazon");
+
     let phones;
     try {
       phones = await getPhones();
+      if (limit !== null && !isNaN(limit)) {
+        phones = phones.slice(0, limit);
+      }
     } catch (fetchError: any) {
+      errorsCount++;
+      if (logId) {
+        await finishSyncLog(logId, {
+          status: "failed",
+          error_message: fetchError.message || "Failed to fetch phones",
+          errors: errorsCount
+        });
+      }
       return NextResponse.json({ error: fetchError.message || "Failed to fetch phones" }, { status: 500 });
     }
 
-    const results = [];
-    
     // 2. Batch process (batch size = 3) to prevent rate limits
     const batchSize = 3;
     for (let i = 0; i < phones.length; i += batchSize) {
       const batch = phones.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (phone) => {
+        phonesProcessed++;
         const query = `${phone.brand} ${phone.model}`;
         
         let amazonHtml = null;
@@ -499,13 +562,16 @@ export async function POST(request: Request) {
           amazonHtml = await scrapeAmazonHtml(query);
         } catch (e) {
           console.error(`Amazon scrape error for ${query}:`, e);
+          errorsCount++;
         }
 
         const amazonPrice = findBestPrice(amazonHtml, phone.price, "Amazon");
         const amazonAvailable = !!amazonPrice && checkAvailability(amazonHtml);
+        const amazonImage = extractAmazonProductImage(amazonHtml);
 
         const updatePayload: any = {
-          prices_last_scraped: new Date().toISOString()
+          prices_last_scraped: new Date().toISOString(),
+          last_synced_at: new Date().toISOString()
         };
 
         if (amazonPrice) {
@@ -513,19 +579,39 @@ export async function POST(request: Request) {
           updatePayload.amazon_available = amazonAvailable;
         } else {
           updatePayload.amazon_available = false;
+          errorsCount++; // Count as scrape failure / fallback
+        }
+
+        const hasNewImage = amazonImage && (!phone.image_url || phone.image_url.trim() === "" || phone.image_source === "flipkart");
+        if (hasNewImage) {
+          updatePayload.image_url = amazonImage;
+          updatePayload.thumbnail_url = amazonImage;
+          updatePayload.image_source = "amazon";
         }
 
         let dbSuccess = false;
-        try {
-          const { error: updateError } = await (supabase.from("phones") as any)
-            .update(updatePayload)
-            .eq("id", phone.id);
+        if (dryRun) {
+          dbSuccess = true;
+          phonesUpdated++;
+          if (hasNewImage) imagesUpdated++;
+        } else {
+          try {
+            const { error: updateError } = await (supabase.from("phones") as any)
+              .update(updatePayload)
+              .eq("id", phone.id);
 
-          if (!updateError) {
-            dbSuccess = true;
+            if (!updateError) {
+              dbSuccess = true;
+              phonesUpdated++;
+              if (hasNewImage) imagesUpdated++;
+            } else {
+              errorsCount++;
+              console.error("DB update error in Amazon sync:", updateError);
+            }
+          } catch (dbErr) {
+            errorsCount++;
+            console.warn("DB update failed during sync.");
           }
-        } catch (dbErr) {
-          console.warn("DB update failed during sync.");
         }
 
         // Sync store-specific prices, history, and alerts to maintain database consistency
@@ -535,32 +621,60 @@ export async function POST(request: Request) {
         const amazonScrapeStatus = amazonPrice ? "success" : "failed";
         const amazonScrapeError = amazonPrice ? null : detectScrapeError(amazonHtml);
 
-        await syncStoreData(
-          phone.id,
-          "Amazon",
-          finalAmazonPrice,
-          amazonAvailDetails.available,
-          amazonUrls.productUrl,
-          amazonUrls.affiliateUrl,
-          amazonPrice ? "scraped" : "fallback",
-          amazonScrapeStatus,
-          amazonScrapeError,
-          amazonAvailDetails.message
-        );
+        if (!dryRun) {
+          await syncStoreData(
+            phone.id,
+            "Amazon",
+            finalAmazonPrice,
+            amazonAvailDetails.available,
+            amazonUrls.productUrl,
+            amazonUrls.affiliateUrl,
+            amazonPrice ? "scraped" : "fallback",
+            amazonScrapeStatus,
+            amazonScrapeError,
+            amazonAvailDetails.message
+          );
+        }
+
+        // Recalculate phone active and market_status based on store_prices
+        let hasAvailableStore = amazonAvailDetails.available;
+        if (!dryRun) {
+          try {
+            const { data: stores, error: storesErr } = await (supabase.from("store_prices") as any)
+              .select("available")
+              .eq("phone_id", phone.id);
+            
+            if (!storesErr && stores && stores.length > 0) {
+              hasAvailableStore = stores.some((s: any) => s.available === true);
+              const { error: phoneUpdateErr } = await (supabase.from("phones") as any)
+                .update({
+                  active: hasAvailableStore,
+                  market_status: hasAvailableStore ? "ACTIVE" : "OUT_OF_STOCK"
+                })
+                .eq("id", phone.id);
+              
+              if (phoneUpdateErr) {
+                console.error(`Failed to update phone active status for ID ${phone.id}:`, phoneUpdateErr);
+              }
+            }
+          } catch (dbErr) {
+            console.error("Failed to update phone status:", dbErr);
+          }
+        }
+
+        if (!hasAvailableStore) {
+          phonesMarkedInactive++;
+        }
 
         // Retrieve the updated phone status to check for transition from OUT_OF_STOCK -> ACTIVE
-        try {
-          const { data: updatedPhone } = await (supabase.from("phones") as any)
-            .select("market_status, brand, model, amazon_price, flipkart_price")
-            .eq("id", phone.id)
-            .maybeSingle();
+        if (!dryRun && hasAvailableStore) {
+          try {
+            const { data: updatedPhone } = await (supabase.from("phones") as any)
+              .select("market_status, brand, model, amazon_price, flipkart_price")
+              .eq("id", phone.id)
+              .maybeSingle();
 
-          if (updatedPhone) {
-            const oldStatus = phone.market_status;
-            const newStatus = updatedPhone.market_status;
-
-            // Trigger stock alerts if the phone is ACTIVE (transitions and retries)
-            if (newStatus === "ACTIVE") {
+            if (updatedPhone && updatedPhone.market_status === "ACTIVE") {
               await triggerStockAlerts(
                 phone.id,
                 `${updatedPhone.brand} ${updatedPhone.model}`,
@@ -568,9 +682,9 @@ export async function POST(request: Request) {
                 updatedPhone.flipkart_price || 0
               );
             }
+          } catch (statusErr) {
+            console.error("Failed to check status transitions for stock alerts:", statusErr);
           }
-        } catch (statusErr) {
-          console.error("Failed to check status transitions for stock alerts:", statusErr);
         }
 
         return {
@@ -593,13 +707,42 @@ export async function POST(request: Request) {
       }
     }
 
+    // Success sync log update
+    await finishSyncLog(logId, {
+      status: "success",
+      phones_processed: phonesProcessed,
+      phones_inserted: phonesInserted,
+      phones_updated: phonesUpdated,
+      phones_marked_inactive: phonesMarkedInactive,
+      images_updated: imagesUpdated,
+      errors: errorsCount
+    });
+
     return NextResponse.json({
-      message: "Amazon sync completed successfully.",
+      message: dryRun ? "Amazon dry run completed." : "Amazon sync completed successfully.",
+      phonesProcessed,
+      phonesUpdated,
+      phonesMarkedInactive,
+      imagesUpdated,
+      errorsCount,
       syncedCount: results.length,
       phones: results
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Amazon sync API route failed:", error);
+    if (logId) {
+      await finishSyncLog(logId, {
+        status: "failed",
+        error_message: error.message || String(error),
+        phones_processed: phonesProcessed,
+        phones_inserted: phonesInserted,
+        phones_updated: phonesUpdated,
+        phones_marked_inactive: phonesMarkedInactive,
+        images_updated: imagesUpdated,
+        errors: errorsCount + 1
+      });
+    }
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Internal Server Error"
     }, { status: 500 });

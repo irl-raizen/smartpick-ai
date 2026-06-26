@@ -23,7 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     
     // Dynamic phone slug routes
     const phoneRoutes = activePhones.map((phone) => ({
-      url: `${baseUrl}/phones/${generatePhoneSlug(phone.brand, phone.model)}`,
+      url: `${baseUrl}/phones/${phone.slug || generatePhoneSlug(phone.brand, phone.model)}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.6,

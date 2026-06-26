@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { getPhoneByIdOrSlug, getPhones, generatePhoneSlug } from "@/src/lib/supabase";
+import { getPhoneByIdOrSlug, getPhones, generatePhoneSlug, supabase } from "@/src/lib/supabase";
 import type { Phone } from "@/src/types/phone";
 import { LivePrices } from "@/src/components/LivePrices";
 import { PriceTrendsAndAlerts } from "@/src/components/PriceTrendsAndAlerts";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 export const revalidate = 1800; // ISR - Revalidate every 30 minutes
 
 type PageProps = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { id } = await params;
-  const phone = await getPhoneByIdOrSlug(id);
+  const { slug } = await params;
+  const phone = await getPhoneByIdOrSlug(slug);
 
   if (!phone) {
     return {
@@ -167,6 +167,25 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
+function formatRelativeTime(dateString: string | null | undefined): string {
+  if (!dateString) return "Recently";
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  } catch (e) {
+    return "Recently";
+  }
+}
+
 function ScoreBar({ label, score, colorClass }: { label: string; score: number; colorClass: string }) {
   return (
     <div className="space-y-2">
@@ -185,12 +204,40 @@ function ScoreBar({ label, score, colorClass }: { label: string; score: number; 
 }
 
 export default async function PhoneDetailPage({ params }: PageProps) {
-  const { id } = await params;
-  const phone = await getPhoneByIdOrSlug(id);
+  const { slug } = await params;
+
+  // Permanent redirect for legacy numeric IDs
+  const isNumeric = /^\d+$/.test(slug);
+  if (isNumeric) {
+    const phone = await getPhoneByIdOrSlug(slug);
+    if (phone && phone.slug) {
+      redirect(`/phones/${phone.slug}`);
+    }
+  }
+
+  const phone = await getPhoneByIdOrSlug(slug);
 
   if (!phone) {
     notFound();
   }
+
+  // Log page view event for analytics
+  try {
+    (supabase.from("analytics_events") as any).insert({
+      event_type: "page_view",
+      event_data: {
+        id: phone.id,
+        slug: phone.slug || slug,
+        brand: phone.brand,
+        model: phone.model
+      }
+    }).then(({ error }: any) => {
+      if (error) console.warn("Analytics insertion warning:", error.message);
+    });
+  } catch (e) {
+    console.warn("Analytics log error:", e);
+  }
+
 
   const reviewMarkdown = phone.ai_review && phone.ai_review.trim() !== ""
     ? phone.ai_review
@@ -283,6 +330,31 @@ export default async function PhoneDetailPage({ params }: PageProps) {
     ]
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app"}`
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Phones",
+        "item": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app"}/phones`
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": `${phone.brand} ${phone.model}`,
+        "item": `${process.env.NEXT_PUBLIC_SITE_URL || "https://smartpickai.vercel.app"}/phones/${generatePhoneSlug(phone.brand, phone.model)}`
+      }
+    ]
+  };
+
   return (
     <>
       <script
@@ -293,7 +365,12 @@ export default async function PhoneDetailPage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
+
       {/* Background Orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-violet-600/15 blur-3xl" />
@@ -338,7 +415,13 @@ export default async function PhoneDetailPage({ params }: PageProps) {
               <p className="mt-4 text-4xl font-extrabold text-white tracking-tight">
                 {formatPrice(phone.price)}
               </p>
-              <p className="text-xs text-zinc-550 mt-1">MRP (Incl. of all taxes) in India</p>
+              <p className="text-xs text-zinc-500 mt-1">MRP (Incl. of all taxes) in India</p>
+              {phone.last_synced_at && (
+                <p className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1.5 justify-center sm:justify-start">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Last updated {formatRelativeTime(phone.last_synced_at)}
+                </p>
+              )}
             </div>
 
             {phone.image_url && phone.image_url.trim() !== "" && (

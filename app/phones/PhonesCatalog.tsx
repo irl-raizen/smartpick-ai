@@ -85,6 +85,25 @@ export function PhonesCatalog({ initialPhones }: PhonesCatalogProps) {
     console.log("Phones fetched from Supabase:", initialPhones);
   }, [initialPhones]);
 
+  // Debounced search analytics logging
+  useEffect(() => {
+    if (searchTerm.trim().length < 3) return;
+    
+    const delayDebounceFn = setTimeout(() => {
+      fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: "search",
+          eventData: { query: searchTerm.trim() }
+        })
+      }).catch((err) => console.warn("Failed to log search analytics:", err));
+    }, 1500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
+
+
   // Dynamically extract unique brands
   const brands = useMemo(() => {
     const unique = new Set(initialPhones.map((phone) => phone.brand));

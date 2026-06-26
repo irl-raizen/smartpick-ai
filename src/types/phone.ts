@@ -21,4 +21,14 @@ export type Phone = {
   flipkart_available?: boolean;
   active?: boolean;
   market_status?: string;
+  slug?: string;
+  thumbnail_url?: string;
+  processor?: string;
+  ram?: string;
+  storage?: string;
+  os?: string;
+  rating?: number;
+  image_source?: string;
+  last_synced_at?: string;
+  launch_year?: number;
 };
