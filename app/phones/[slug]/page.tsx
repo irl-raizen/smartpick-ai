@@ -436,6 +436,33 @@ export default async function PhoneDetailPage({ params }: PageProps) {
             </div>
           </div>
         </main>
+
+        {/* Mobile Sticky Bottom Buy Card */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-zinc-900 bg-zinc-950/90 px-4 py-3 backdrop-blur-lg shadow-2xl flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase leading-none block">{phone.brand}</span>
+            <span className="text-sm font-black text-white block truncate">{phone.model}</span>
+            <span className="text-xs font-bold text-violet-450 mt-0.5 block leading-none">{formatPrice(phone.price)}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={phone.amazon_link || `https://www.amazon.in/s?k=${encodeURIComponent(`${phone.brand} ${phone.model}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 text-xs font-black text-zinc-950 shadow-sm"
+            >
+              Amazon
+            </a>
+            <a
+              href={phone.flipkart_link || `https://www.flipkart.com/search?q=${encodeURIComponent(`${phone.brand} ${phone.model}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-650 px-4 py-2.5 text-xs font-black text-white shadow-sm"
+            >
+              Flipkart
+            </a>
+          </div>
+        </div>
       </div>
     </>
   );

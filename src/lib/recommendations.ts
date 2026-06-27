@@ -87,17 +87,8 @@ export function getRecommendations(
 
   return withinBudget
     .map((phone) => ({
-      id: phone.id,
-      brand: phone.brand,
-      model: phone.model,
-      price: phone.price,
+      ...phone,
       chipset: phone.chipset || phone.processor || "Unknown Chipset",
-      battery: phone.battery,
-      camera: phone.camera,
-      display: phone.display,
-      image_url: phone.image_url,
-      amazon_link: phone.amazon_link,
-      flipkart_link: phone.flipkart_link,
       recommendationScore: calculateRecommendationScore(phone, preferences),
     }))
     .sort((a, b) => b.recommendationScore - a.recommendationScore)

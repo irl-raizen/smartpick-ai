@@ -1,11 +1,13 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
+import { Sparkles, Trophy, Cpu, Camera, Battery, DollarSign, ArrowLeftRight, Check, ShoppingBag, Eye } from "lucide-react";
 import type { Phone } from "@/src/types/phone";
 import { SearchableDropdown } from "@/src/components/SearchableDropdown";
 import { LivePrices } from "@/src/components/LivePrices";
+import { motion, AnimatePresence } from "framer-motion";
 
 type CompareCatalogProps = {
   phones: Phone[];
@@ -16,6 +18,7 @@ type CompareCatalogProps = {
 function generatePhoneSlug(brand: string, model: string): string {
   return `${brand}-${model}`
     .toLowerCase()
+    .replace(/\+/g, "plus")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
@@ -34,6 +37,20 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
   // Selected phone IDs
   const [phone1Id, setPhone1Id] = useState(initialPhone1Id || "");
   const [phone2Id, setPhone2Id] = useState(initialPhone2Id || "");
+  const [isStickyHeaderVisible, setIsStickyHeaderVisible] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  // Monitor scroll for sticky header
+  useEffect(() => {
+    const handleScroll = () => {
+      if (triggerRef.current) {
+        const top = triggerRef.current.getBoundingClientRect().top;
+        setIsStickyHeaderVisible(top < 0);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Load from search params on mount
   useEffect(() => {
@@ -53,11 +70,11 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
     const p2 = phones.find((p) => String(p.id) === p2Id);
     
     if (p1 && p2) {
-      const slug1 = generatePhoneSlug(p1.brand, p1.model);
-      const slug2 = generatePhoneSlug(p2.brand, p2.model);
+      const slug1 = p1.slug || generatePhoneSlug(p1.brand, p1.model);
+      const slug2 = p2.slug || generatePhoneSlug(p2.brand, p2.model);
       window.history.pushState(null, "", `/compare/${slug1}-vs-${slug2}`);
     } else if (p1) {
-      const slug1 = generatePhoneSlug(p1.brand, p1.model);
+      const slug1 = p1.slug || generatePhoneSlug(p1.brand, p1.model);
       window.history.pushState(null, "", `/compare/${slug1}`);
     } else {
       window.history.pushState(null, "", `/compare`);
@@ -78,7 +95,7 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
   const phone1 = phones.find((p) => String(p.id) === phone1Id) || null;
   const phone2 = phones.find((p) => String(p.id) === phone2Id) || null;
 
-  // Calculate Overall Scores (sum of camera + gaming + battery)
+  // Calculate Overall Scores
   const phone1Overall = phone1 ? phone1.score_camera + phone1.score_gaming + phone1.score_battery : 0;
   const phone2Overall = phone2 ? phone2.score_camera + phone2.score_gaming + phone2.score_battery : 0;
 
@@ -95,24 +112,48 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
   const priceWinner = phone1 && phone2 ? getWinner(phone2.price, phone1.price) : null; // Lower price wins!
   const overallWinner = phone1 && phone2 ? getWinner(phone1Overall, phone2Overall) : null;
 
-  // Helper to render winner badge
-  const renderWinnerBadge = (isWinner: boolean) => {
+  // Generate Comparison Summary Recommendation
+  const getComparisonSummary = () => {
+    if (!phone1 || !phone2) return "";
+    
+    if (overallWinner === "tie") {
+      return `Both the ${phone1.model} and ${phone2.model} match closely with identical total performance score of ${phone1Overall}/30. Choose ${phone1.model} if you favor brand branding, or ${phone2.model} for model aesthetics.`;
+    }
+
+    const winner = overallWinner === "phone1" ? phone1 : phone2;
+    const loser = overallWinner === "phone1" ? phone2 : phone1;
+    const winnerScore = overallWinner === "phone1" ? phone1Overall : phone2Overall;
+    const loserScore = overallWinner === "phone1" ? phone2Overall : phone1Overall;
+    
+    let details = "";
+    if (winner.price < loser.price) {
+      details = `representing superior value as it costs ${formatPrice(loser.price - winner.price)} less while delivering higher overall ratings.`;
+    } else {
+      details = `costing ${formatPrice(winner.price - loser.price)} more but justifying its premium with flagship specs.`;
+    }
+
+    return `Expert Verdict: The ${winner.brand} ${winner.model} is the recommended pick with an overall score of ${winnerScore}/30 (vs ${loserScore}/30), ${details}`;
+  };
+
+  // Helper to render winner indicator
+  const renderWinnerIndicator = (isWinner: boolean) => {
     if (!isWinner) return null;
     return (
-      <span className="ml-2 inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shadow-sm animate-pulse">
+      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+        <Trophy className="h-3 w-3 fill-current" />
         Winner
       </span>
     );
   };
 
   return (
-    <div className="space-y-16">
-      {/* Searchable Dropdowns */}
-      <div className="grid gap-6 sm:grid-cols-2 relative overflow-visible z-20">
-        <div className="rounded-2xl border border-zinc-900 bg-zinc-900/40 p-5 backdrop-blur-sm shadow-xl relative overflow-visible z-20">
+    <div className="space-y-12">
+      {/* Searchable Dropdowns (col-span-2) */}
+      <div className="grid gap-6 sm:grid-cols-2 relative z-20">
+        <div className="rounded-3xl border border-zinc-900 bg-zinc-900/25 p-5 backdrop-blur-sm shadow-xl relative z-20">
           <SearchableDropdown
             id="phone1"
-            label="Select Smartphone A"
+            label="Smartphone A"
             placeholder="Search & choose phone..."
             options={phones.map((phone) => ({
               id: String(phone.id),
@@ -124,10 +165,10 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
             onChange={handlePhone1Change}
           />
         </div>
-        <div className="rounded-2xl border border-zinc-900 bg-zinc-900/40 p-5 backdrop-blur-sm shadow-xl relative overflow-visible z-10">
+        <div className="rounded-3xl border border-zinc-900 bg-zinc-900/25 p-5 backdrop-blur-sm shadow-xl relative z-10">
           <SearchableDropdown
             id="phone2"
-            label="Select Smartphone B"
+            label="Smartphone B"
             placeholder="Search & choose phone..."
             options={phones.map((phone) => ({
               id: String(phone.id),
@@ -141,79 +182,53 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
         </div>
       </div>
 
-      {/* Comparison Presentation */}
+      {/* Comparison View Trigger Anchor */}
+      <div ref={triggerRef} className="h-1" />
+
+      {/* Comparison Content */}
       {!phone1 || !phone2 ? (
-        <div className="rounded-3xl border border-zinc-900 bg-zinc-900/20 p-16 text-center backdrop-blur-sm">
-          <svg className="mx-auto h-12 w-12 text-zinc-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-          </svg>
-          <h2 className="text-xl font-semibold text-white">Compare side-by-side</h2>
-          <p className="mt-2 text-sm text-zinc-500 max-w-sm mx-auto">
-            Choose a smartphone in both boxes above to unlock category winner metrics and spec breakdowns.
+        <div className="rounded-3xl border border-zinc-900 bg-zinc-900/15 p-20 text-center backdrop-blur-sm flex flex-col justify-center items-center">
+          <div className="h-12 w-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-550">
+            <ArrowLeftRight className="h-6 w-6" />
+          </div>
+          <h2 className="text-xl font-black text-white tracking-tight">Compare Side-by-Side</h2>
+          <p className="mt-2 text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+            Please select two smartphones using the dropdowns above to initiate full hardware and score comparisons.
           </p>
         </div>
       ) : (
         <div className="space-y-8 animate-fadeIn">
+          
           {/* Comparison Cards & Winner Dashboard */}
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Phone 1 Dashboard */}
-            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden flex flex-col justify-between ${
+            
+            {/* Phone 1 Card */}
+            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition relative overflow-hidden flex flex-col justify-between ${
               overallWinner === "phone1"
-                ? "border-violet-500/50 bg-violet-950/10 shadow-lg shadow-violet-950/20"
-                : "border-zinc-900 bg-zinc-900/30"
+                ? "border-violet-500/40 bg-violet-950/10 shadow-2xl shadow-violet-950/20"
+                : "border-zinc-900 bg-zinc-900/20"
             }`}>
-              <div>
-                {overallWinner === "phone1" && (
-                  <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md z-10">
-                    Overall Winner
-                  </div>
-                )}
-                <span className="text-xs uppercase font-bold text-violet-400">{phone1.brand}</span>
-                <h2 className="text-2xl font-bold text-white mt-1">{phone1.model}</h2>
-                <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone1.price)}</p>
+              {overallWinner === "phone1" && (
+                <div className="absolute top-0 right-0 bg-violet-600 text-white text-[9px] uppercase font-black tracking-widest px-4 py-1.5 rounded-bl-2xl shadow-md z-10 flex items-center gap-1">
+                  <Trophy className="h-3 w-3 fill-current" />
+                  Overall Winner
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                <span className="text-[10px] uppercase font-bold text-violet-400">{phone1.brand}</span>
+                <h2 className="text-2xl font-black text-white leading-tight">{phone1.model}</h2>
+                <span className="text-2xl font-black text-white block">{formatPrice(phone1.price)}</span>
 
-                {phone1.image_url && phone1.image_url.trim() !== "" && (
-                  <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
-                    <Image
+                {phone1.image_url && (
+                  <div className="relative w-full h-44 rounded-2xl bg-zinc-950/50 border border-zinc-900/60 p-3 flex items-center justify-center overflow-hidden">
+                    <img
                       src={phone1.image_url}
-                      alt={`${phone1.brand} ${phone1.model}`}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 300px"
-                      className="object-contain p-3 transition duration-500 hover:scale-105"
+                      alt=""
+                      className="h-full object-contain p-2 hover:scale-[1.03] transition duration-500"
                     />
                   </div>
                 )}
-
-                <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Price</span>
-                    <span className="font-semibold text-zinc-200">
-                      {formatPrice(phone1.price)} {renderWinnerBadge(priceWinner === "phone1")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Camera Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone1.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone1")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Gaming Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone1.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone1")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Battery Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone1.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone1")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
-                    <span className="text-zinc-400">Total Score</span>
-                    <span className="text-fuchsia-300">{phone1Overall} / 30</span>
-                  </div>
-                </div>
               </div>
 
               <LivePrices
@@ -223,64 +238,33 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
               />
             </div>
 
-            {/* Phone 2 Dashboard */}
-            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition duration-300 relative overflow-hidden flex flex-col justify-between ${
+            {/* Phone 2 Card */}
+            <div className={`rounded-3xl border p-6 backdrop-blur-sm transition relative overflow-hidden flex flex-col justify-between ${
               overallWinner === "phone2"
-                ? "border-violet-500/50 bg-violet-950/10 shadow-lg shadow-violet-950/20"
-                : "border-zinc-900 bg-zinc-900/30"
+                ? "border-violet-500/40 bg-violet-950/10 shadow-2xl shadow-violet-950/20"
+                : "border-zinc-900 bg-zinc-900/20"
             }`}>
-              <div>
-                {overallWinner === "phone2" && (
-                  <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-xl shadow-md z-10">
-                    Overall Winner
-                  </div>
-                )}
-                <span className="text-xs uppercase font-bold text-violet-400">{phone2.brand}</span>
-                <h2 className="text-2xl font-bold text-white mt-1">{phone2.model}</h2>
-                <p className="text-2xl font-extrabold text-white mt-4">{formatPrice(phone2.price)}</p>
+              {overallWinner === "phone2" && (
+                <div className="absolute top-0 right-0 bg-violet-600 text-white text-[9px] uppercase font-black tracking-widest px-4 py-1.5 rounded-bl-2xl shadow-md z-10 flex items-center gap-1">
+                  <Trophy className="h-3 w-3 fill-current" />
+                  Overall Winner
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                <span className="text-[10px] uppercase font-bold text-violet-400">{phone2.brand}</span>
+                <h2 className="text-2xl font-black text-white leading-tight">{phone2.model}</h2>
+                <span className="text-2xl font-black text-white block">{formatPrice(phone2.price)}</span>
 
-                {phone2.image_url && phone2.image_url.trim() !== "" && (
-                  <div className="relative w-full h-44 my-4 rounded-2xl overflow-hidden bg-zinc-950/40 border border-zinc-900/60 p-3 flex items-center justify-center">
-                    <Image
+                {phone2.image_url && (
+                  <div className="relative w-full h-44 rounded-2xl bg-zinc-950/50 border border-zinc-900/60 p-3 flex items-center justify-center overflow-hidden">
+                    <img
                       src={phone2.image_url}
-                      alt={`${phone2.brand} ${phone2.model}`}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 300px"
-                      className="object-contain p-3 transition duration-500 hover:scale-105"
+                      alt=""
+                      className="h-full object-contain p-2 hover:scale-[1.03] transition duration-500"
                     />
                   </div>
                 )}
-
-                <div className="mt-6 space-y-3 pt-6 border-t border-zinc-850/60">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Price</span>
-                    <span className="font-semibold text-zinc-200">
-                      {formatPrice(phone2.price)} {renderWinnerBadge(priceWinner === "phone2")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Camera Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone2.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone2")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Gaming Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone2.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone2")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">Battery Score</span>
-                    <span className="font-semibold text-zinc-200">
-                      {phone2.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone2")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-3 border-t border-zinc-900/60 font-semibold">
-                    <span className="text-zinc-400">Total Score</span>
-                    <span className="text-fuchsia-300">{phone2Overall} / 30</span>
-                  </div>
-                </div>
               </div>
 
               <LivePrices
@@ -289,82 +273,224 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
                 flipkartLink={phone2.flipkart_link}
               />
             </div>
+
+          </div>
+
+          {/* Expert Verdict Card */}
+          <div className="rounded-3xl border border-zinc-900 bg-gradient-to-r from-violet-900/20 to-fuchsia-900/10 p-6 backdrop-blur-sm flex items-start gap-4">
+            <div className="h-10 w-10 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-400 shrink-0">
+              <Sparkles className="h-5 w-5 animate-pulse" />
+            </div>
+            <div>
+              <span className="text-[9px] uppercase font-extrabold tracking-widest text-violet-300 block">AI Summary Verdict</span>
+              <p className="text-sm font-semibold text-zinc-200 mt-1 leading-relaxed">
+                {getComparisonSummary()}
+              </p>
+            </div>
+          </div>
+
+          {/* Graphical Score Comparison Bars */}
+          <div className="rounded-3xl border border-zinc-900 bg-zinc-900/15 p-6 sm:p-8 space-y-6">
+            <h3 className="text-lg font-black text-white tracking-tight border-b border-zinc-900 pb-4">
+              AI Ratings Breakdown
+            </h3>
+
+            <div className="space-y-5">
+              {/* Camera Score Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-zinc-450">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                    <Camera className="h-4 w-4 text-violet-400" />
+                    Camera Performance
+                  </span>
+                  <div className="flex gap-4">
+                    <span className={cameraWinner === "phone1" ? "text-white" : ""}>{phone1.model}: {phone1.score_camera}/10</span>
+                    <span className={cameraWinner === "phone2" ? "text-white" : ""}>{phone2.model}: {phone2.score_camera}/10</span>
+                  </div>
+                </div>
+                <div className="h-2.5 w-full bg-zinc-950 rounded-full overflow-hidden flex">
+                  <div 
+                    className="h-full bg-violet-500 border-r border-zinc-950 transition-all duration-500"
+                    style={{ width: `${(phone1.score_camera / 20) * 100}%` }}
+                  />
+                  <div 
+                    className="h-full bg-fuchsia-500 transition-all duration-500"
+                    style={{ width: `${(phone2.score_camera / 20) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Gaming Score Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-zinc-450">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                    <Cpu className="h-4 w-4 text-emerald-400" />
+                    Gaming Speed & Chipset
+                  </span>
+                  <div className="flex gap-4">
+                    <span className={gamingWinner === "phone1" ? "text-white" : ""}>{phone1.model}: {phone1.score_gaming}/10</span>
+                    <span className={gamingWinner === "phone2" ? "text-white" : ""}>{phone2.model}: {phone2.score_gaming}/10</span>
+                  </div>
+                </div>
+                <div className="h-2.5 w-full bg-zinc-950 rounded-full overflow-hidden flex">
+                  <div 
+                    className="h-full bg-emerald-500 border-r border-zinc-950 transition-all duration-500"
+                    style={{ width: `${(phone1.score_gaming / 20) * 100}%` }}
+                  />
+                  <div 
+                    className="h-full bg-teal-500 transition-all duration-500"
+                    style={{ width: `${(phone2.score_gaming / 20) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Battery Score Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-zinc-450">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                    <Battery className="h-4 w-4 text-amber-400" />
+                    Battery Endurance
+                  </span>
+                  <div className="flex gap-4">
+                    <span className={batteryWinner === "phone1" ? "text-white" : ""}>{phone1.model}: {phone1.score_battery}/10</span>
+                    <span className={batteryWinner === "phone2" ? "text-white" : ""}>{phone2.model}: {phone2.score_battery}/10</span>
+                  </div>
+                </div>
+                <div className="h-2.5 w-full bg-zinc-950 rounded-full overflow-hidden flex">
+                  <div 
+                    className="h-full bg-amber-500 border-r border-zinc-950 transition-all duration-500"
+                    style={{ width: `${(phone1.score_battery / 20) * 100}%` }}
+                  />
+                  <div 
+                    className="h-full bg-orange-500 transition-all duration-500"
+                    style={{ width: `${(phone2.score_battery / 20) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Overall Score Bar */}
+              <div className="space-y-2 pt-2 border-t border-zinc-900">
+                <div className="flex justify-between text-xs font-bold text-zinc-450">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                    <Trophy className="h-4 w-4 text-violet-400" />
+                    Overall Performance Score
+                  </span>
+                  <div className="flex gap-4">
+                    <span className={overallWinner === "phone1" ? "text-white font-extrabold" : ""}>{phone1.model}: {phone1Overall}/30</span>
+                    <span className={overallWinner === "phone2" ? "text-white font-extrabold" : ""}>{phone2.model}: {phone2Overall}/30</span>
+                  </div>
+                </div>
+                <div className="h-3 w-full bg-zinc-950 rounded-full overflow-hidden flex">
+                  <div 
+                    className="h-full bg-gradient-to-r from-violet-600 to-indigo-650 border-r border-zinc-950 transition-all duration-500"
+                    style={{ width: `${(phone1Overall / 60) * 100}%` }}
+                  />
+                  <div 
+                    className="h-full bg-gradient-to-r from-fuchsia-600 to-pink-500 transition-all duration-500"
+                    style={{ width: `${(phone2Overall / 60) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+            </div>
           </div>
 
           {/* Specifications Table */}
-          <div className="rounded-3xl border border-zinc-900 bg-zinc-900/40 p-6 backdrop-blur-sm shadow-2xl overflow-hidden">
-            <h3 className="text-lg font-bold text-white tracking-wide border-b border-zinc-850 pb-4 mb-4">
-              Side-by-Side Specs
+          <div className="rounded-3xl border border-zinc-900 bg-zinc-900/10 p-6 sm:p-8 backdrop-blur-sm shadow-2xl overflow-hidden">
+            <h3 className="text-lg font-black text-white tracking-tight border-b border-zinc-900 pb-4 mb-4">
+              Side-by-Side Specifications
             </h3>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-850/40 text-xs font-bold uppercase tracking-wider text-zinc-500">
+                  <tr className="border-b border-zinc-850/40 text-[10px] font-extrabold uppercase tracking-wider text-zinc-500">
                     <th className="py-3 px-4 w-1/4">Specification</th>
-                    <th className="py-3 px-4 w-3/8 text-zinc-250 font-bold">{phone1.brand} {phone1.model}</th>
-                    <th className="py-3 px-4 w-3/8 text-zinc-250 font-bold">{phone2.brand} {phone2.model}</th>
+                    <th className="py-3 px-4 w-3/8 text-zinc-200 font-black">{phone1.brand} {phone1.model}</th>
+                    <th className="py-3 px-4 w-3/8 text-zinc-200 font-black">{phone2.brand} {phone2.model}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-medium">
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Price</td>
-                    <td className="py-4 px-4 text-white font-semibold">
-                      {formatPrice(phone1.price)} {renderWinnerBadge(priceWinner === "phone1")}
+                  {/* Price */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Price</td>
+                    <td className={`py-4.5 px-4 font-bold ${priceWinner === "phone1" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {formatPrice(phone1.price)} {renderWinnerIndicator(priceWinner === "phone1")}
                     </td>
-                    <td className="py-4 px-4 text-white font-semibold">
-                      {formatPrice(phone2.price)} {renderWinnerBadge(priceWinner === "phone2")}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Processor</td>
-                    <td className="py-4 px-4">{phone1.chipset}</td>
-                    <td className="py-4 px-4">{phone2.chipset}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Battery</td>
-                    <td className="py-4 px-4">{phone1.battery}</td>
-                    <td className="py-4 px-4">{phone2.battery}</td>
-                  </tr>
-                  { (phone1.camera || phone2.camera) && (
-                    <tr>
-                      <td className="py-4 px-4 text-zinc-500">Camera Specs</td>
-                      <td className="py-4 px-4">{phone1.camera || "—"}</td>
-                      <td className="py-4 px-4">{phone2.camera || "—"}</td>
-                    </tr>
-                  )}
-                  { (phone1.display || phone2.display) && (
-                    <tr>
-                      <td className="py-4 px-4 text-zinc-500">Display</td>
-                      <td className="py-4 px-4">{phone1.display || "—"}</td>
-                      <td className="py-4 px-4">{phone2.display || "—"}</td>
-                    </tr>
-                  )}
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Camera Rating</td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone1.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone1")}
-                    </td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone2.score_camera}/10 {renderWinnerBadge(cameraWinner === "phone2")}
+                    <td className={`py-4.5 px-4 font-bold ${priceWinner === "phone2" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {formatPrice(phone2.price)} {renderWinnerIndicator(priceWinner === "phone2")}
                     </td>
                   </tr>
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Gaming Rating</td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone1.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone1")}
+                  {/* Processor */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Processor</td>
+                    <td className="py-4.5 px-4">{phone1.processor || phone1.chipset}</td>
+                    <td className="py-4.5 px-4">{phone2.processor || phone2.chipset}</td>
+                  </tr>
+                  {/* RAM */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">RAM Size</td>
+                    <td className="py-4.5 px-4">{phone1.ram || "N/A"}</td>
+                    <td className="py-4.5 px-4">{phone2.ram || "N/A"}</td>
+                  </tr>
+                  {/* Storage */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Storage</td>
+                    <td className="py-4.5 px-4">{phone1.storage || "N/A"}</td>
+                    <td className="py-4.5 px-4">{phone2.storage || "N/A"}</td>
+                  </tr>
+                  {/* Battery */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Battery</td>
+                    <td className="py-4.5 px-4">{phone1.battery} mAh</td>
+                    <td className="py-4.5 px-4">{phone2.battery} mAh</td>
+                  </tr>
+                  {/* Camera */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Camera</td>
+                    <td className="py-4.5 px-4 leading-relaxed">{phone1.camera || "—"}</td>
+                    <td className="py-4.5 px-4 leading-relaxed">{phone2.camera || "—"}</td>
+                  </tr>
+                  {/* Display */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Display</td>
+                    <td className="py-4.5 px-4 leading-relaxed">{phone1.display || "—"}</td>
+                    <td className="py-4.5 px-4 leading-relaxed">{phone2.display || "—"}</td>
+                  </tr>
+                  {/* OS */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">OS</td>
+                    <td className="py-4.5 px-4">{phone1.os || "N/A"}</td>
+                    <td className="py-4.5 px-4">{phone2.os || "N/A"}</td>
+                  </tr>
+                  {/* Camera Score */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Camera Score</td>
+                    <td className={`py-4.5 px-4 font-bold ${cameraWinner === "phone1" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone1.score_camera}/10 {renderWinnerIndicator(cameraWinner === "phone1")}
                     </td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone2.score_gaming}/10 {renderWinnerBadge(gamingWinner === "phone2")}
+                    <td className={`py-4.5 px-4 font-bold ${cameraWinner === "phone2" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone2.score_camera}/10 {renderWinnerIndicator(cameraWinner === "phone2")}
                     </td>
                   </tr>
-                  <tr>
-                    <td className="py-4 px-4 text-zinc-500">Battery Rating</td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone1.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone1")}
+                  {/* Gaming Score */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Gaming Score</td>
+                    <td className={`py-4.5 px-4 font-bold ${gamingWinner === "phone1" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone1.score_gaming}/10 {renderWinnerIndicator(gamingWinner === "phone1")}
                     </td>
-                    <td className="py-4 px-4 font-semibold">
-                      {phone2.score_battery}/10 {renderWinnerBadge(batteryWinner === "phone2")}
+                    <td className={`py-4.5 px-4 font-bold ${gamingWinner === "phone2" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone2.score_gaming}/10 {renderWinnerIndicator(gamingWinner === "phone2")}
+                    </td>
+                  </tr>
+                  {/* Battery Score */}
+                  <tr className="hover:bg-zinc-900/25 transition">
+                    <td className="py-4.5 px-4 text-zinc-500 uppercase tracking-wider font-extrabold text-[9px]">Battery Score</td>
+                    <td className={`py-4.5 px-4 font-bold ${batteryWinner === "phone1" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone1.score_battery}/10 {renderWinnerIndicator(batteryWinner === "phone1")}
+                    </td>
+                    <td className={`py-4.5 px-4 font-bold ${batteryWinner === "phone2" ? "bg-emerald-500/5 text-emerald-400" : ""}`}>
+                      {phone2.score_battery}/10 {renderWinnerIndicator(batteryWinner === "phone2")}
                     </td>
                   </tr>
                 </tbody>
@@ -373,6 +499,49 @@ export function CompareCatalog({ phones, initialPhone1Id, initialPhone2Id }: Com
           </div>
         </div>
       )}
+
+      {/* 5. STICKY HEADER FOR SCROLL */}
+      <AnimatePresence>
+        {isStickyHeaderVisible && phone1 && phone2 && (
+          <motion.div
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            exit={{ y: -100 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-16 left-0 right-0 z-40 border-b border-zinc-900 bg-zinc-950/90 backdrop-blur-md px-4 py-3 shadow-xl hidden md:block"
+          >
+            <div className="mx-auto max-w-6xl flex items-center justify-between gap-6">
+              <div className="flex-1 flex items-center gap-3">
+                {phone1.image_url && (
+                  <div className="h-8 w-8 relative flex items-center justify-center p-0.5 bg-zinc-900 rounded">
+                    <img src={phone1.image_url} alt="" className="h-full object-contain" />
+                  </div>
+                )}
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-zinc-500 block leading-none">{phone1.brand}</span>
+                  <span className="text-xs font-bold text-white block">{phone1.model}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 text-zinc-500 font-extrabold text-xs">
+                <span>VS</span>
+              </div>
+
+              <div className="flex-1 flex items-center gap-3 justify-end">
+                <div className="text-right">
+                  <span className="text-[9px] uppercase font-bold text-zinc-500 block leading-none">{phone2.brand}</span>
+                  <span className="text-xs font-bold text-white block">{phone2.model}</span>
+                </div>
+                {phone2.image_url && (
+                  <div className="h-8 w-8 relative flex items-center justify-center p-0.5 bg-zinc-900 rounded">
+                    <img src={phone2.image_url} alt="" className="h-full object-contain" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
