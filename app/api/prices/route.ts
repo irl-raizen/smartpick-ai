@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase, getPhones } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin, getPhones } from "@/src/lib/supabase";
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -265,7 +265,7 @@ async function syncStoreData(
     if (existingPrice) {
       const oldPrice = Number(existingPrice.price);
       if (oldPrice !== newPrice) {
-        const { error: histErr } = await (supabase.from("price_history") as any)
+        const { error: histErr } = await (supabaseAdmin.from("price_history") as any)
           .insert({
             phone_id: phoneId,
             store_name: storeName,
@@ -278,7 +278,7 @@ async function syncStoreData(
         }
       }
 
-      const { error: updateErr } = await (supabase.from("store_prices") as any)
+      const { error: updateErr } = await (supabaseAdmin.from("store_prices") as any)
         .update({
           price: newPrice,
           available: available,
@@ -296,7 +296,7 @@ async function syncStoreData(
         console.error(`Failed to update store price for ${storeName}`, updateErr);
       }
     } else {
-      const { error: insertErr } = await (supabase.from("store_prices") as any)
+      const { error: insertErr } = await (supabaseAdmin.from("store_prices") as any)
         .insert({
           phone_id: phoneId,
           store_name: storeName,
@@ -316,7 +316,7 @@ async function syncStoreData(
         console.error(`Failed to insert store price for ${storeName}`, insertErr);
       }
 
-      const { error: histErr } = await (supabase.from("price_history") as any)
+      const { error: histErr } = await (supabaseAdmin.from("price_history") as any)
         .insert({
           phone_id: phoneId,
           store_name: storeName,
@@ -343,7 +343,7 @@ async function syncStoreData(
       
       if (!storesErr && stores && stores.length > 0) {
         const hasAvailableStore = stores.some((s: any) => s.available === true);
-        const { error: phoneUpdateErr } = await (supabase.from("phones") as any)
+        const { error: phoneUpdateErr } = await (supabaseAdmin.from("phones") as any)
           .update({
             active: hasAvailableStore,
             market_status: hasAvailableStore ? "ACTIVE" : "OUT_OF_STOCK"
@@ -395,7 +395,7 @@ async function checkAndTriggerPriceAlerts(phoneId: number | string, newPrice: nu
         console.log(`==================================================\n`);
 
         // Mark alert as triggered
-        await (supabase.from("price_alerts") as any)
+        await (supabaseAdmin.from("price_alerts") as any)
           .update({
             is_triggered: true,
             triggered_at: new Date().toISOString()

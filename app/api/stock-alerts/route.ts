@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin } from "@/src/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     }
 
     // Insert new subscription
-    const { error: insertError } = await (supabase.from("stock_alerts") as any)
+    const { error: insertError } = await (supabaseAdmin.from("stock_alerts") as any)
       .insert({
         phone_id: pId,
         email: cleanEmail,

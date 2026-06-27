@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin } from "@/src/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing eventType or eventData" }, { status: 400 });
     }
 
-    const { error } = await (supabase
+    const { error } = await (supabaseAdmin
       .from("analytics_events") as any)
       .insert({
         event_type: eventType,

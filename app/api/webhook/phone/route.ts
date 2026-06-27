@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin } from "@/src/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     if (existingData) {
       // Update existing record
-      const { data: updateData, error: updateError } = await (supabase.from("phones") as any)
+      const { data: updateData, error: updateError } = await (supabaseAdmin.from("phones") as any)
         .update(phoneData)
         .eq("id", existingData.id)
         .select();
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       });
     } else {
       // Insert new record
-      const { data: insertData, error: insertError } = await (supabase.from("phones") as any)
+      const { data: insertData, error: insertError } = await (supabaseAdmin.from("phones") as any)
         .insert(phoneData)
         .select();
 

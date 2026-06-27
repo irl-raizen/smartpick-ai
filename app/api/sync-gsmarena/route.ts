@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase, getPhones, generatePhoneSlug, startSyncLog, finishSyncLog } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin, getPhones, generatePhoneSlug, startSyncLog, finishSyncLog } from "@/src/lib/supabase";
 import * as cheerio from "cheerio";
 
 const USER_AGENTS = [
@@ -455,7 +455,7 @@ export async function POST(request: Request) {
             if (specs.imageUrl) imagesUpdated++;
             syncedDevices.push({ brand: phone.brand, model: phone.model, action: "inserted (dry run)" });
           } else {
-            const { error: insertErr } = await (supabase.from("phones") as any)
+            const { error: insertErr } = await (supabaseAdmin.from("phones") as any)
               .insert(insertPayload);
 
             if (!insertErr) {
@@ -578,9 +578,9 @@ export async function POST(request: Request) {
                 if (imageChanged) imagesUpdated++;
                 syncedDevices.push({ brand: phone.brand, model: phone.model, action: "updated (dry run)" });
               } else {
-                const { error: updateErr } = await (supabase.from("phones") as any)
-                  .update(updatePayload)
-                  .eq("id", dbPhone.id);
+                const { error: updateErr } = await (supabaseAdmin.from("phones") as any)
+                   .update(updatePayload)
+                   .eq("id", dbPhone.id);
 
                 if (!updateErr) {
                   phonesUpdated++;
@@ -594,7 +594,7 @@ export async function POST(request: Request) {
             } else {
               if (!dryRun) {
                 // Always update last_synced_at to mark successful sync
-                await (supabase.from("phones") as any)
+                await (supabaseAdmin.from("phones") as any)
                   .update({ last_synced_at: new Date().toISOString() })
                   .eq("id", dbPhone.id);
               }
@@ -653,8 +653,8 @@ export async function POST(request: Request) {
               if (specs.imageUrl) imagesUpdated++;
               syncedDevices.push({ brand: phone.brand, model: phone.model, action: "inserted (dry run)" });
             } else {
-              const { error: insertErr } = await (supabase.from("phones") as any)
-                .insert(insertPayload);
+              const { error: insertErr } = await (supabaseAdmin.from("phones") as any)
+                 .insert(insertPayload);
 
               if (!insertErr) {
                 phonesInserted++;
@@ -770,7 +770,7 @@ export async function POST(request: Request) {
             if (specs.imageUrl) imagesUpdated++;
             syncedDevices.push({ brand, model, action: "discovered_inserted (dry run)" });
           } else {
-            const { error: insertErr } = await (supabase.from("phones") as any)
+            const { error: insertErr } = await (supabaseAdmin.from("phones") as any)
               .insert(insertPayload);
 
             if (!insertErr) {

@@ -22,6 +22,12 @@ export const supabase = createClient<{
   };
 }>(supabaseUrl, supabaseAnonKey);
 
+export const supabaseAdmin = createClient(
+  supabaseUrl,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
+
+
 let cachedSelectString: string | null = null;
 
 const allPossibleColumns = [
@@ -143,7 +149,7 @@ export async function getPhoneByIdOrSlug(idOrSlug: string): Promise<Phone | null
 
 export async function startSyncLog(source: string): Promise<string | number | null> {
   try {
-    const { data, error } = await (supabase.from("sync_logs") as any)
+    const { data, error } = await (supabaseAdmin.from("sync_logs") as any)
       .insert({
         source,
         status: "running",
@@ -188,7 +194,7 @@ export async function finishSyncLog(
       durationMs = finishedAt.getTime() - new Date(logEntry.started_at).getTime();
     }
 
-    const { error } = await (supabase.from("sync_logs") as any)
+    const { error } = await (supabaseAdmin.from("sync_logs") as any)
       .update({
         status: payload.status,
         phones_processed: payload.phones_processed ?? 0,

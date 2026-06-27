@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/src/lib/supabase";
+import { supabase, supabaseAdmin } from "@/src/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     if (existingAlert) {
       // Update existing alert
-      const { error: updateErr } = await (supabase.from("price_alerts") as any)
+      const { error: updateErr } = await (supabaseAdmin.from("price_alerts") as any)
         .update({
           target_price: priceVal,
           is_triggered: false,
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       }
     } else {
       // Insert new alert
-      const { error: insertErr } = await (supabase.from("price_alerts") as any)
+      const { error: insertErr } = await (supabaseAdmin.from("price_alerts") as any)
         .insert({
           phone_id: phoneId,
           email: email.toLowerCase().trim(),
