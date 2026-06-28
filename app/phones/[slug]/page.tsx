@@ -405,10 +405,7 @@ export default async function PhoneDetailPage({ params }: PageProps) {
 
               {/* Performance Ratings */}
               <PerformanceCard
-                scoreCamera={phone.score_camera}
-                scoreGaming={phone.score_gaming}
-                scoreBattery={phone.score_battery}
-                displaySpecs={phone.display}
+                phone={phone}
               />
 
               {/* AI Review */}

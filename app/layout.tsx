@@ -22,6 +22,7 @@ export const metadata: Metadata = {
     template: "%s | SmartPick AI"
   },
   description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+  manifest: "/manifest.json",
   alternates: {
     canonical: "./",
   },
@@ -115,6 +116,12 @@ export default function RootLayout({
               <Link href="/best-deals" className="text-xs sm:text-sm font-bold text-zinc-400 hover:text-white transition duration-300 flex items-center gap-1">
                 Deals
                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+              </Link>
+              <Link href="/blog" className="text-xs sm:text-sm font-bold text-zinc-400 hover:text-white transition duration-300">
+                Blog
+              </Link>
+              <Link href="/wishlist" className="text-xs sm:text-sm font-bold text-zinc-400 hover:text-white transition duration-300">
+                Wishlist
               </Link>
               <Link href="/chat" className="text-xs sm:text-sm font-bold text-zinc-400 hover:text-white transition duration-300">
                 Chat

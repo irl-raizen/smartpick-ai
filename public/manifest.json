@@ -1,0 +1,16 @@
+{
+  "name": "SmartPick AI",
+  "short_name": "SmartPick",
+  "description": "Smart Smartphone Recommendations, Price Drops & Affiliate Shopping Alerts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

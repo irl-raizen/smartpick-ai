@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackEvent } from "@/src/lib/analytics";
 
 type StorePrice = {
   name: string;
@@ -199,6 +200,14 @@ export function LivePrices({
                 href={link}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => {
+                  trackEvent("affiliate_click", {
+                    phoneId: phoneId,
+                    store: store.name,
+                    price: store.price,
+                    product: query
+                  });
+                }}
                 className={`flex-1 text-center rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-300 hover:scale-[1.02] shadow-lg ${bgClass} ${shadowClass} active:scale-95 flex flex-col justify-center items-center gap-1.5`}
               >
                 <div className="flex items-center gap-1.5">
