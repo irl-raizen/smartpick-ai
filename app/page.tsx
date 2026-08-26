@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getPhones, generatePhoneSlug, supabase } from "@/src/lib/supabase";
 import { HomeSearchBar } from "@/src/components/HomeSearchBar";
 import { HomeRecommendationForm } from "@/src/components/HomeRecommendationForm";
+import { HomeNewsletterForm } from "@/src/components/HomeNewsletterForm";
 import { 
   Sparkles, 
   Flame, 
@@ -18,8 +19,7 @@ import {
   TrendingDown,
   Layers,
   ChevronRight,
-  ShieldCheck,
-  Send
+  ShieldCheck
 } from "lucide-react";
 import type { Phone } from "@/src/types/phone";
 
@@ -41,10 +41,26 @@ export default async function Home() {
   const allPhones = await getPhones();
   const activePhones = allPhones.filter(p => p.active !== false);
 
-  // 1. Trending Phones (Sleekest flagships)
+  // 1. Trending Phones (Sorted by dynamic Trending Score)
   const trendingPhones = [...activePhones]
-    .filter(p => p.rating && p.rating >= 4.5)
+    .sort((a, b) => {
+      const viewsA = (a as any).views_count || 0;
+      const comparesA = (a as any).compare_count || 0;
+      const clicksA = (a as any).clicks_count || 0;
+      const scoreA = viewsA + comparesA * 3 + clicksA * 5;
+
+      const viewsB = (b as any).views_count || 0;
+      const comparesB = (b as any).compare_count || 0;
+      const clicksB = (b as any).clicks_count || 0;
+      const scoreB = viewsB + comparesB * 3 + clicksB * 5;
+
+      if (scoreA === 0 && scoreB === 0) {
+        return (b.score_overall || 0) - (a.score_overall || 0);
+      }
+      return scoreB - scoreA;
+    })
     .slice(0, 6);
+
 
   // 2. Top Rated Phones (Sorted by rating)
   const topRatedPhones = [...activePhones]
@@ -151,6 +167,24 @@ export default async function Home() {
         {/* Instant Search Component */}
         <HomeSearchBar phones={allPhones} />
 
+        {/* AI Suggestions Tags */}
+        <div className="max-w-xl mx-auto flex flex-wrap items-center justify-center gap-2 pt-2">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 mr-1">Suggestions:</span>
+          {[
+            "Best gaming phone under ₹30000",
+            "Best camera phone",
+            "Best iPhone alternative"
+          ].map((item) => (
+            <Link
+              key={item}
+              href={`/chat?q=${encodeURIComponent(item)}`}
+              className="inline-flex items-center gap-1 rounded-xl border border-zinc-900 bg-zinc-950/45 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-white hover:border-zinc-800 transition duration-300 active:scale-[0.98]"
+            >
+              {item}
+            </Link>
+          ))}
+        </div>
+
         {/* Hero CTA & Stats Panel */}
         <div className="max-w-2xl mx-auto flex flex-wrap justify-center gap-4 text-xs font-bold uppercase tracking-wider pt-2">
           <a href="/phones" className="inline-flex items-center gap-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-5 py-3.5 text-zinc-200 hover:text-white transition">
@@ -220,6 +254,44 @@ export default async function Home() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* CATEGORIES SECTION */}
+      <section className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-6 lg:px-8 relative z-10">
+        <div className="text-center max-w-2xl mx-auto space-y-2 mb-10">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-violet-455">Smart Category Selectors</span>
+          <h2 className="text-3xl font-black text-white tracking-tight">Explore Curated Categories</h2>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Quick links to lists of phones selected specifically for your exact usage profile and budget constraints.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
+          {[
+            { name: "Gaming Phones", path: "/phones?sortBy=gaming-desc", icon: Cpu, desc: "Max processing power", color: "from-violet-500/20 to-fuchsia-500/5 hover:border-violet-500/40" },
+            { name: "Camera Phones", path: "/phones?sortBy=camera-desc", icon: Camera, desc: "Instagram-ready focus", color: "from-fuchsia-500/20 to-pink-500/5 hover:border-fuchsia-500/40" },
+            { name: "Battery Phones", path: "/phones?sortBy=battery-desc", icon: Battery, desc: "Extended daily life", color: "from-emerald-500/20 to-teal-500/5 hover:border-emerald-500/40" },
+            { name: "Budget Phones", path: "/phones?priceBracket=0-10000", icon: BadgePercent, desc: "Best value under 10k", color: "from-amber-500/20 to-orange-500/5 hover:border-amber-500/40" },
+            { name: "Flagship Phones", path: "/phones?priceBracket=30000%2B", icon: Sparkles, desc: "Top-tier premium build", color: "from-rose-500/20 to-red-500/5 hover:border-rose-500/40" }
+          ].map((cat, i) => {
+            const Icon = cat.icon;
+            return (
+              <Link
+                key={i}
+                href={cat.path}
+                className={`group relative rounded-3xl border border-zinc-900 bg-gradient-to-br ${cat.color} p-6 hover:scale-[1.03] transition-all duration-300 flex flex-col justify-between overflow-hidden backdrop-blur-sm`}
+              >
+                <div className="h-10 w-10 rounded-2xl bg-zinc-950/80 border border-zinc-900 flex items-center justify-center text-zinc-300 group-hover:text-white transition shadow-lg mb-4 shrink-0">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white leading-tight">{cat.name}</h4>
+                  <p className="text-[10px] text-zinc-450 font-semibold mt-1">{cat.desc}</p>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
@@ -666,23 +738,7 @@ export default async function Home() {
               </p>
             </div>
 
-            <div className="w-full md:max-w-md">
-              <form onSubmit={(e) => { e.preventDefault(); alert('Subscribed successfully!'); }} className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="email"
-                  required
-                  placeholder="Enter your email address"
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-violet-500 transition duration-300"
-                />
-                <button
-                  type="submit"
-                  className="rounded-2xl bg-violet-600 hover:bg-violet-550 px-6 py-3.5 text-xs font-black text-white flex items-center justify-center gap-1.5 transition duration-300 hover:shadow-lg hover:shadow-violet-900/20 shrink-0"
-                >
-                  Subscribe
-                  <Send className="h-3.5 w-3.5" />
-                </button>
-              </form>
-            </div>
+            <HomeNewsletterForm />
           </div>
         </div>
       </section>
