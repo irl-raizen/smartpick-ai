@@ -31,4 +31,7 @@ export type Phone = {
   image_source?: string;
   last_synced_at?: string;
   launch_year?: number;
+  score_performance?: number;
+  score_value?: number;
+  score_overall?: number;
 };
