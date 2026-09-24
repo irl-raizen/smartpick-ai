@@ -160,7 +160,7 @@ export default async function Home() {
           </h1>
 
           <p className="mx-auto max-w-2xl text-base sm:text-lg text-zinc-400 leading-relaxed font-medium">
-            SmartPick AI analyzes specs, camera quality, gaming capabilities, and live Amazon & Flipkart prices to matching you with the perfect smartphone.
+            SmartPick AI analyzes specs, camera quality, gaming capabilities, and live Amazon & Flipkart prices to match you with the perfect smartphone.
           </p>
         </div>
 

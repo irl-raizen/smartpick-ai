@@ -21,14 +21,14 @@ export const metadata: Metadata = {
     default: "SmartPick AI - Find & Compare Smartphones",
     template: "%s | SmartPick AI"
   },
-  description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+  description: "Find the right smartphone in India with AI-powered recommendations, live Amazon and Flipkart deals, and side-by-side comparisons.",
   manifest: "/manifest.json",
   alternates: {
     canonical: "./",
   },
   openGraph: {
     title: "SmartPick AI - Find & Compare Smartphones",
-    description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+    description: "Find the right smartphone in India with AI-powered recommendations, live Amazon and Flipkart deals, and side-by-side comparisons.",
     url: "./",
     siteName: "SmartPick AI",
     locale: "en_IN",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SmartPick AI - Find & Compare Smartphones",
-    description: "AI-powered smartphone recommendations and side-by-side comparison engine.",
+    description: "Find the right smartphone in India with AI-powered recommendations, live Amazon and Flipkart deals, and side-by-side comparisons.",
   },
   robots: {
     index: true,
