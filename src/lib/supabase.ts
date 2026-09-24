@@ -4,11 +4,11 @@ import type { Phone } from "@/src/types/phone";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing Supabase environment variables. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
-  );
-}
+// Keep the preview renderable when project variables have not reached the
+// runtime yet. Production uses the real client whenever both values exist.
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const clientUrl = supabaseUrl || "https://placeholder.supabase.co";
+const clientAnonKey = supabaseAnonKey || "preview-placeholder-key";
 
 export const supabase = createClient<{
   public: {
@@ -20,11 +20,11 @@ export const supabase = createClient<{
       };
     };
   };
-}>(supabaseUrl, supabaseAnonKey);
+}>(clientUrl, clientAnonKey);
 
 export const supabaseAdmin = createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  clientUrl,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || clientAnonKey
 );
 
 
@@ -47,6 +47,10 @@ const fallbackColumns = [
 
 export async function getSelectString(): Promise<string> {
   if (cachedSelectString) return cachedSelectString;
+  if (!isSupabaseConfigured) {
+    cachedSelectString = fallbackColumns.join(", ");
+    return cachedSelectString;
+  }
   try {
     const { data, error } = await supabase.from("phones").select("*").limit(1);
     if (!error && data && data.length > 0) {
@@ -63,6 +67,7 @@ export async function getSelectString(): Promise<string> {
 }
 
 export async function getPhones(): Promise<Phone[]> {
+  if (!isSupabaseConfigured) return [];
   const selectStr = await getSelectString();
   const { data, error } = await supabase
     .from("phones")
