@@ -27,6 +27,12 @@ export const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || clientAnonKey
 );
 
+// Server-rendered catalog reads use the existing project's service key so RLS
+// policies cannot hide the public catalog. Browser code always uses the anon key.
+const catalogClient =
+  typeof window === "undefined" && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? supabaseAdmin
+    : supabase;
 
 let cachedSelectString: string | null = null;
 
@@ -52,7 +58,7 @@ export async function getSelectString(): Promise<string> {
     return cachedSelectString;
   }
   try {
-    const { data, error } = await supabase.from("phones").select("*").limit(1);
+    const { data, error } = await catalogClient.from("phones").select("*").limit(1);
     if (!error && data && data.length > 0) {
       const keys = Object.keys(data[0]);
       const validKeys = keys.filter(key => allPossibleColumns.includes(key));
