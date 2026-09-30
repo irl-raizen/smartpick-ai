@@ -75,7 +75,7 @@ export async function getSelectString(): Promise<string> {
 export async function getPhones(): Promise<Phone[]> {
   if (!isSupabaseConfigured) return [];
   const selectStr = await getSelectString();
-  const { data, error } = await supabase
+  const { data, error } = await catalogClient
     .from("phones")
     .select(selectStr)
     .order("brand", { ascending: true })
